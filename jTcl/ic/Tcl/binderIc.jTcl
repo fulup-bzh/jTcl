@@ -1,0 +1,181 @@
+#  $Header: /Master/jTcl/jTcl/ic/Tcl/binderIc.jTcl,v 1.2 1999/03/08 08:34:17 fulup Exp $
+#
+#         Copyright(c) 96-97 Fridu a Free Software Company
+#         Copyright(c) 95-96 gant Skol Veur Breizh Kreizteiz (IUP) Gwened
+#                      University of South Britany
+#
+# File      :   bindingIcTk.tcl set all default binding for ic/TK programs
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   tcov
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:17 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/ic/Tcl/binderIc.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01g,14jan98,fulup update select mecanism
+# 01f,11nov97,fulup adapted to new binding and metawidget strategy
+# 01e,03jun97,fulup make all widget grey when waiting answer
+# 01d,30may97,fulup Clean up binding on free
+# 01c,04mar97,fulup Adapt auto queryValidation to ic depend
+# 01b,28feb97,fulup released jTcl
+# 01a,fulup,24feb96 writen
+#
+
+# Import needed modules
+# ----------------------------
+jClassImport {ic.dispatch.*}
+
+# Watchdog is global to all classes
+ set _WD_ID 0
+
+class IcBinder {extends IcDispatch} \
+{
+ static    delayList  300
+ static    delayHelp  3000
+
+  # "Call each time a use try to queryValid a fiel or a button"
+  # ------------------------------------------------------------
+  public queryValid {}
+  {
+
+    # try get trimed value from entryfield
+    if {[catch {string trim [$THIS(widget) get]} VALUE]} \
+    {
+      ;# give a default value for read-only widget
+      set VALUE -
+    } else {
+      # "Check previous returned value and send new if different"
+      if {$VALUE == $THIS(value)} {return}
+    }
+
+    # waiting action are grey painted
+    $CLASS(paint) $MY LCK
+    bind $THIS(widget) <Key> "$CLASS(keyIn)      $MY"
+
+    # We dont queryValidate widget we query ic icSvId to take what it wants
+    $THIS(icSvId) send valid [concat $THIS(rule) $VALUE]
+
+  } ;# "end queryValid"
+
+  # "Ask for a popup queryList after a small delay"
+  # ------------------------------------------
+  public queryList {}
+  {
+
+     if {[winfo class $THIS(widget)] != "Entry"} {return}
+
+     set WD_ID [after $CLASS(delayList) "
+        bind $THIS(widget) <ButtonRelease-1> {}
+        $THIS(icSvId) send list $THIS(rule)
+      "]
+
+     # If user hit a key cancel wathdog
+     bind $THIS(widget) <ButtonRelease-1> "
+         bind $THIS(widget) <ButtonRelease-1> {}
+         after cancel $WD_ID
+       "
+  } ;# "end queryList"
+
+
+  # "select is call from a choice popup list"
+  # -----------------------------------------
+  public select {DATA}
+  {
+    # first update widget with selected value
+    $CLASS(VAL) $MY $DATA
+
+    # submit selected data to rule server
+    $CLASS(queryValid) $MY
+
+    # force GUI focus
+    focus $THIS(widget)
+  }
+
+  # "Wait for a small delay and query for queryTip"
+  # -----------------------------------------------
+  public queryTip {} \
+  {
+    global _WD_ID
+
+     # "if queryTip already in dont search it on net"
+     if [info exists THIS(tip)] \
+     {
+       set _WD_ID [after $CLASS(delayHelp) \
+       "
+        $CLASS(TIP) $MY [list $THIS(tip)]
+       "]
+     } else {
+       set _WD_ID [after $CLASS(delayHelp) \
+       "
+        $THIS(icSvId) send tip $THIS(rule)
+       "]
+     }
+  } ;# "end queryTip"
+
+  # "Undo call ic rules icSvId queryUndo function"
+  # -----------------------------------------
+  public queryUndo {}
+  {
+    # send question to rule icSvId
+    $THIS(icSvId) send undo $THIS(rule)
+
+  }  # "end queryUndo"
+
+  # "When focusIn we repain object depending on current status"
+  # -----------------------------------------------------------
+  public keyIn {}
+  {
+     # "repaint the Object depending on staus"
+     $CLASS(paint) $MY UNK
+     set  THIS(changed)  1
+     bind $THIS(widget) <Key> {}
+  }
+
+  # "each time a widget is focused in we call this widget"
+  # ------------------------------------------------------
+  public focusIn {}
+  {
+     # Cancel tip request if any
+     global _WD_ID
+     after cancel $_WD_ID
+
+     bind $THIS(widget) <Key>        "$CLASS(keyIn)      $MY"
+     bind $THIS(widget) <FocusOut>   "$CLASS(queryValid) $MY"
+  }
+
+  # "effectively bind widget in TK"
+  # -------------------------------
+  public bind {}
+  {
+   # First define static binding
+   bind $THIS(widget) <Double-1>     "$CLASS(queryValid) $MY"
+   bind $THIS(widget) <Button-2>     "$CLASS(queryList)  $MY"
+   bind $THIS(widget) <Button-3>     "$CLASS(queryList)  $MY"
+   bind $THIS(widget) <FocusIn>      "$CLASS(focusIn)    $MY"
+   bind $THIS(widget) <Button-1>     "$CLASS(queryList)  $MY"
+   bind $THIS(widget) <Key-Escape>   "$CLASS(queryUndo)  $MY"
+   bind $THIS(widget) <Enter>        "$CLASS(queryTip)   $MY"
+
+   # We have one watchdog for all widget in class WARNING: redefined in errorIc.jTcl
+   bind $THIS(widget) <Leave>        {after cancel $_WD_ID}
+
+   # Those binding can't be compute staticaly
+   bind $THIS(widget) <Control-n>    "\[$MY get wdNext\]      focus"
+   bind $THIS(widget) <Control-p>    "\[$MY get wdPrevious\]  focus"
+   bind $THIS(widget) <Return>  "
+       $CLASS(queryValid) $MY
+       ;\[$MY get wdNext\]    focus
+    "
+
+   $THIS(icSvId) register $MY $THIS(rule)
+  }
+} ;# "end class IcBinder"
+
+
+

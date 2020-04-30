@@ -1,0 +1,52 @@
+Small second generation WEB server
+-----------------------------------
+
+Adr is a second generation server, it provide a LOGIN mecanism and support
+all private session in a slave interpretor. Application logic and HTML
+presentation are cleary seperated.
+
+On one hand presentation is handle with standard HTML form,
+On the other hand application in run in a slave TCL interpretor.
+
+
+At init time, jTcl will create a first generation WEB server, in with
+constructor has been overwrited in order receiving an aditionnal parameter
+"auto" this parameters in a directory path list, that system will search
+in order locating "slave.jTcl" files.
+
+At Login time after name check if any:
+
+ - Creation of a slave interpretor
+ - Aliasing some usefull command from main interpretor (none in demo)
+ - Sourcing jTcl/package.jTcl + all slave.jTcl from auto path
+ - Start of application boot strap from last slave.jTcl.
+ - exec login procedure (in demo will either loas object from file
+   or recreate and empty adress book from jTcl classes).
+ - Return a cookie with answser to browser.
+
+For each form with .thtml extention
+
+ - Parse fill before returning it to browser and replace all <tcl ....>
+   tag with result of tcl execution. Ex: <tcl exec date> would return
+   current date from Unix command.
+
+For each HTML form
+
+ - Parse and request from browser and add inside slave interp an array
+   with all variable from form.
+
+ - Start a TCL procedure with the same name as validated HTML form
+
+At logout
+
+ - Demo will serialize data on disk in oder retreiving them at next login
+ - Clean up the place, and destro slave interpretor
+
+How to start
+
+   jTcl httpdAdrDemo.jTcl (will start server on port:1234)
+
+
+Good luck
+
+fulup@fridu.bzh

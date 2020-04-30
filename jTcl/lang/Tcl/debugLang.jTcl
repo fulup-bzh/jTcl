@@ -1,0 +1,134 @@
+# $Header: /Master/jTcl/jTcl/lang/Tcl/debugLang.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   debugTcl.tcl  Some usefull debug routines
+# Projet    :   Fridu Realtime Booster
+# Module    :   core generic Object-test-debug facilities
+# Auteur    :   Fulup Ar Foll [fulup@fridu.bzh]
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/lang/Tcl/debugLang.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01g,11feb98,fulup moved out ldelete to objectLang.jTcl
+# 01f,08may97,fulup protected parameters in order suporting rules name
+# 01e,27mar97,fulup added bgerror routine in tclsh
+# 01d,25mar97,fulup change debug tracing method
+# 01c,18mar97,fulup rename VEROSE to JTCL_DEBUG
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+#
+
+# -----------------------------------------------------------------
+# Implement jTcl trace and debug routines
+# depending on JTCL_DEBUG environment variables
+# -----------------------------------------------------------------
+
+# Example : any jTcl routine
+set errorInfo 0
+
+# dont include this file more than one
+# ------------------------------------
+if {![info exist DEBUG_TCL_LOADED]} \
+{
+  set DEBUG_TCL_LOADED TRUE
+
+  # If in tclet don't display copyright
+  if {![info exist embed_args]} \
+  {
+    # puts stdout "\nFridu TCL extentions Copyright(c) 1996 FRIDU a Free Software Company\n"
+  }
+
+# if bgerror does not exist map it on error
+# -----------------------------------------
+if {![info exist tk_library]} \
+{
+  # bgerror is defines in TK lib and very usefull under Tcl
+  # -------------------------------------------------------
+  proc bgerror {MSG} \
+  {
+    global errorInfo tcl_platform
+    set info $errorInfo
+
+    puts "BG:ERROR $MSG"
+    puts "$info"
+} } ;# Warning both if and proc must end on the same line for jDoc
+
+#    Display a message is verbose is set
+# --------------------------------------
+proc debug.msg {args} \
+{
+ global JTCL_DEBUG
+
+ # Just get out if debug not set
+ if {![info exists JTCL_DEBUG]} {return}
+
+ global embed_args
+
+ set LEVEL [expr [info level] -1]
+ set PROC_NAME   [lindex [info level $LEVEL] 0]
+
+ if [string match $JTCL_DEBUG $PROC_NAME] \
+ {
+    if {![info exists embed_args]} \
+      { puts "DB.$LEVEL.$PROC_NAME \[$args\]" }
+ }
+} ;# end debug.msg
+
+
+#    Display a message is verbose is set
+# --------------------------------------
+proc debug.trace {LEVEL args} \
+{
+ global JTCL_DEBUG
+ global embed_args
+
+ if [string match $JTCL_DEBUG [lindex $args 0]] \
+ {
+    if [info exists embed_args] \
+    {
+      #browser_writeFrame frame.message "TR.$LEVEL.$args<p>"
+    }  else {
+      puts "TR.$LEVEL.$args"
+    }
+  }
+} ;# end debug.trace
+
+
+# Install auto strace in debug mode we create a dummy proc that
+# just print params values and rename originale proc to _D_name
+# We now use two proc in order knowing with proc fail at compilation time
+# -----------------------------------------------------------------------
+proc debug.proc {NAME PARAMS BODY} \
+{
+ global JTCL_DEBUG
+ if [info exists JTCL_DEBUG] \
+ {
+  set DEBUG "debug.trace \"\[info level\]\" $NAME"
+  foreach PARAM $PARAMS {set DEBUG [concat $DEBUG \$\{[lindex $PARAM 0]\}]}
+  proc $NAME $PARAMS "$DEBUG; $BODY"
+
+ } else {
+  # No debug included
+  proc $NAME $PARAMS $BODY
+ }
+};# end tclProc if JTCL_DEBUG > 0
+
+# Default init at source time
+# ---------------------------
+ global JTCL_DEBUG
+
+# if JTCL_DEBUG is set in ENV we take it else we set one as default
+# --------------------------------------------------------------
+  if [info exist env(JTCL_DEBUG)] \
+  {
+     set JTCL_DEBUG $env(JTCL_DEBUG)
+  }
+
+} ;# end if already loaded

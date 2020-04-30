@@ -1,0 +1,83 @@
+jTcl-3.01 source and binary versions are freely available on:
+
+         https://github.com/fulup-bzh/jTcl
+
+jTcl is a tool box for designing application WEB server in TCL with a
+JAVA syntax. it use 100% vanilla TCL , does not require any extension
+and run any tclsh supported plateform including W95. Demonstration
+should run just out of the box, let me know in case of trouble.
+
+Tool box provides:
+===============
+ -  a JAVA like object and syntax approach, jTcl parse JAVA-TCL code at
+    startup time, thus making performance very close of conventional TCL
+    code.
+
+ -  a C/C++ to TCL module, to add C/C++ libraries as component under tclsh,
+    skeleton are provides for Linux/Aix/Soloris/SunOS/VxWorks/NT.
+
+ - debug facilities that automatically trace code at execution (strace
+   like) depending on a debug matching pattern.
+
+ - A Serialization mechanism for not loosing time to store your
+   application configuration.
+
+ - A package mechanism reproducing java import functionality
+
+A Class Library with classes for:
+========================
+ - Generic TCP client/server, provides basic mechanism as client min/max
+   client authentication, etc.
+
+ - Conventional WEB server, supports all basic mime type
+   html,gif,jpg,class, etc.
+
+ - Application WEB server,  a specific mime type (htcl)  parse html page
+   and interpret <tcl=..> tag before sending data, this reproduce CGI
+   functionally without CGI.
+
+ - A session server, for each new user login this server start a new
+   slave interpreter. Then at each HTML <form> validation all parameters
+   from HTML <form> are transfer to slave interpreter before calling
+   procedure attached to HTML page. This mechanism allow a clean
+   separation between application logic and HTML presentation.
+
+ - A rule server, allows an automatic TK update for a client connected
+   on it. Application is decomposed in a hierarchical tree of elemental
+   constrains. Then at each validation client send query and server
+   return update. Client is a "very light" model and don't have any
+   application logic. Even libel text from widgets come from server
+   allowing language fly translation.
+
+Demonstration
+===========
+   - a chat server
+   - a WeB server that parse embedded tcl in html pages
+   - a  WeB server that create a slave interpreter at each new client
+     login it handle a small address book where addresses are serialized
+     on disk at user logout.
+   - a rule client and server that support both French and English
+     language.
+
+Which file ?
+===========
+   -  https://github.com/fulup-bzh/jTcl
+      Everything you need to run demo and build application (TCL only)
+
+   -  https://github.com/fulup-bzh/jWrap
+      jWrap (a C/C++ wrapper for jTcl) for Linux X86/RH5.0 (TCL+elf)
+
+   -  https://github.com/fulup-bzh/jCommon
+      all Makefile skeleton, mandatory to recompile jWrap (TCL+Elf binaries)
+
+
+Installation
+============
+
+  Check README.demo
+
+
+enjoy
+
+Fulup (fulup@fridu.bzh)
+

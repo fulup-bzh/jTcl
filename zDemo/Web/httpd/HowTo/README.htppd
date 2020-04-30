@@ -1,0 +1,24 @@
+Mini httpd WEB server
+---------------------
+
+This server is a first generation WEB server, it process all standard
+HTLM pages and have a dedicated mime method to process .htcl extentions.
+
+Thtml extentions are handle has "CGI" script except that they are processed
+directely inside TCL interpretor. As result system return $PAGE
+contents. If command fail an error message is return in place of
+expected result.
+
+This demo use TclHttpd As super class, and only ovewrite "mime" method.
+
+Note: This is an example in order to understand how to build a first generation
+      server. In order building real application user should at least use second
+      generation WEB server, as decribe in ADR directory.
+
+How to start:
+
+ jTcl httpdWebDemo.jTcl (will start server on port 1234)
+
+Good luck
+
+fulup@fridu.bzh

@@ -1,0 +1,151 @@
+#
+# $Header: /Master/jTcl/jTcl/lang/Tcl/doitLang.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company [fridu@fridu.bzh]
+#
+# File      :   doItTcl.h  execute a routine and test result
+# Projet    :   Fridu Realtime Booster
+# SubModule :   core generic Object-test-debug facilities
+# Auteur    :   Fulup Ar Foll [fulup@fridu.bzh]
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/lang/Tcl/doitLang.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01d,13jan98,fulup update for tcl8
+# 01c,28mar97,fulup replace JTCL_DEBUG by VERBOSE
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+#
+#
+
+# propose a default value for verbose
+set VERBOSE 0
+
+# doThis
+#    execute ACTION and test result
+#    depending on result increase
+#    statistic, doIt should never abort
+# --------------------------------------
+proc do.this {ACTION {TST {}} {OK {}} {EXIT {exit}}} \
+{
+  global STEP
+  global SUCCESS
+  global FAIL
+  global ABORT
+  global VERBOSE
+  global UNKNOW
+
+
+  # test if we are facing a comment
+  if {[string match #* $ACTION] != 0}\
+  {
+    if {$VERBOSE} \
+    {
+	puts "\n##$ACTION ###"
+    }
+    return
+  }
+
+  # increment action count
+  set STEP [expr $STEP + 1]
+
+  # try executing action
+  if {\
+     [catch $ACTION RESULT]
+  } \
+  {
+     puts "ABORT.$STEP \[$ACTION\] err=$RESULT"
+     set ABORT [expr $ABORT + 1]
+     return "ABORTED"
+  }
+
+  # puts "### RESULT=$RESULT TST=$TST OK=$OK"
+
+  # depending on test we either use string
+  # or numeric test, when ok result is returned
+  # ---------------------------------------------
+  switch $TST {
+  "" {
+    set UNKNOW [expr $UNKNOW + 1]
+    set STATUS UK
+  }
+  "==" {
+    if {"$RESULT" == "$OK"} \
+    {
+      set SUCCESS [expr $SUCCESS + 1]
+      set STATUS  OK
+    } else {
+      set FAIL    [expr $FAIL + 1]
+      set STATUS  FX
+    }
+  }
+  "!=" {
+    if {"$RESULT" != "$OK"} \
+    {
+      set SUCCESS [expr $SUCCESS + 1]
+      set STATUS  OK
+    } else {
+      set FAIL    [expr $FAIL + 1]
+      set STATUS  FX
+    }
+  }
+  default {
+    if "$RESULT $TST $OK" \
+    {
+        set SUCCESS [expr $SUCCESS + 1]
+        set STATUS  OK
+    } else {
+        set FAIL    [expr $FAIL + 1]
+        set STATUS  FX
+    }
+   }
+ } ;# end switch
+
+  if {$STATUS == "FX" } \
+  {
+      puts "$STATUS.cmd=\[$ACTION] res=\[$RESULT\]"
+      $EXIT
+  } elseif {$VERBOSE} \
+  {
+      puts "$STATUS.cmd=\[$ACTION] res=\[$RESULT\]"
+  }
+  return $RESULT
+} ;# end testStep
+
+proc do.result {MODULE} \
+{
+  global STEP
+  global SUCCESS
+  global FAIL
+  global UNKNOW
+  global ABORT
+
+  puts "\n-------------------------- $MODULE ------"
+  puts "Succeded    $SUCCESS/$STEP"
+  puts "No Status   $UNKNOW/$STEP"
+  puts "        ---"
+  puts "Failed      $FAIL/$STEP"
+  puts "Aborted     $ABORT/$STEP"
+  puts "------------------------------------------"
+  return [list $STEP $SUCCESS $UNKNOW $FAIL $ABORT]
+}
+
+# GLOBAL var init
+# ----------------
+  global STEP
+  global SUCCESS
+  global FAIL
+  global ABORT
+  global UNKNOW
+
+  set    STEP    0
+  set    SUCCESS 0
+  set    FAIL    0
+  set    ABORT   0
+  set    UNKNOW  0

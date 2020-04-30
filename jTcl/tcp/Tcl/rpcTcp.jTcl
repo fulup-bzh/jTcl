@@ -1,0 +1,450 @@
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   rpc.tcp Simple RPC server
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   TCP/Tcl network class
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:19 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/tcp/Tcl/rpcTcp.jTcl,v $
+#
+# Modification History
+# --------------------
+# 01j,29jan98,fulup parse 8bit ASCII from http + check status from slave exec routines
+# 01i,13jan98,fulup set all extention in conformence with *.ht* install rule
+# 01h,22nov97,fulup adapted to new jTcl 3.X replace autopath with jTclPath
+# 01g,19oct97,fulup added autoindex rebuild in autopath dir
+# 01f,27may97,fulup added url dir name to url name
+# 01e,15may97,fulup added applet managment
+# 01d,29apr97,fulup added RPC_ARGS array
+# 01C,28mar97,fulup cleanup mime selection
+# 01d,24mar97,fulup added cookie and session managment
+# 01c,17mar97,fulup Adapted to httpd protocol
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+#
+
+#--------------------------------------------------------------------
+# This program is a RPC server it wait for rpc command on a
+# TCP socket. Rpc commands are a one line list and are executed
+# under a private slave interpretor attached to each client.
+# At client leave slave interpretor is destroyed.
+#--------------------------------------------------------------------
+
+jClassImport  {tcp.httpd.*}
+
+# "Standard rpc class handle text,html & gif files"
+#--------------------------------------------------
+class TcpHttpdRpc {extends TcpHttpd} \
+{
+  set     timeout      900             ;# "default 15mn timeout"
+
+  # "This method is usualy called on timeout it free all client session  resources"
+  # "we can't take CLIENT ID because in http it as probabely leaved us from long"
+  # -------------------------------------------------------------------------------
+  public logout {INTERP}
+  {
+    # cleanup watch dog
+    after cancel [interp eval $INTERP set WD]
+
+    # call logout procedure in slave interpretor
+    set STATUS [$INTERP eval \
+     "if \[catch {logout}\] {return \$errorInfo}
+       return OK \
+     "]
+
+    if {$STATUS != "OK"} {
+      # move errorInfo to a valid HTML string
+      regsub -all "\n" $STATUS {<br>} STATUS
+      return [$CLASS(error) $MY 400 "slave:$CLIENT(interp)" "$STATUS"]
+    }
+
+    if [catch {interp delete $INTERP} RET] \
+      {$CLASS(log) $MY "Warning can't delete interp $INTERP ret=$RET"}
+  }
+  # "Effectively execute rpc command"
+  # ---------------------------------
+  public exec {CLIENT_ID}
+  {
+    #upload client object in server context
+    upvar #0 $CLIENT_ID CLIENT
+
+    # Read all related data and store them in slave interp
+    if [info exists CLIENT(data)] \
+    {
+      foreach {NAME VAL} [split $CLIENT(data) &=] {
+        regsub -all {\+} $VAL { } VAL
+	regsub -all {%([0-9a-hA-H][0-9a-hA-H])} $VAL \
+	            {[format %c 0x\1]} VAL
+	set VAL [subst $VAL]
+
+        debug.msg   $CLIENT(interp) set RPC_ARGS($NAME) $VAL
+        interp eval $CLIENT(interp) set RPC_ARGS($NAME) [list $VAL]
+      } ;# end foreach
+    }
+
+    # Now try to execute our remote command
+    set RET [$CLIENT(interp) eval \
+     "if \[catch [file tail $CLIENT(url)] RET\] {return \[list FX \$errorInfo\]}
+       return \$RET \
+     "]
+
+    if {[lindex $RET 0] == "FX"} {
+      # move errorInfo to a valid HTML string
+      regsub -all "\n" [lindex $RET 1] {<br>} STATUS
+      return [$CLASS(error) $MY 400 "slave:$CLIENT(interp)" "$STATUS"]
+    }
+
+    return $RET
+  } ;# "end exec"
+
+  # "Process rpc request"
+  # ---------------------
+  public eval {CLIENT_ID}
+  {
+    #upload client object in server context
+    upvar #0 $CLIENT_ID CLIENT
+
+    # In keep alive mode Interp already exist and we bypass all cookies test
+    if {![info exists CLIENT(interp)]} \
+    {
+      # Check we effectively received a cookie from our browser
+      if {! [info exists CLIENT(cookie)]} \
+      {
+        set THIS(errno) NotLoged
+        return [$CLASS(error) $MY 400 $CLIENT(url) "You should login first"]
+      }
+
+      # search interpretor in cookies list
+      foreach COOKIE $CLIENT(cookie) \
+      {
+        switch -- [lindex $COOKIE 0]\
+        {
+          interp {set CLIENT(interp) [lindex $COOKIE 1]}
+        }
+      } ;# end foreach
+
+      # Check we effectively received a cookie from our browser
+      if {! [info exists CLIENT(interp)]} \
+      {
+        return [$CLASS(error) $MY 400 $CLIENT(cookie) "Invalid Cookie not an Interp"]
+      }
+
+      # Check slave interp still exist if not send login page
+      if {![interp exists $CLIENT(interp)]} \
+      {
+        unset  CLIENT(interp)
+        return [$CLASS(error) $MY 400 Timeout "Login timeout please login again"]
+      }
+    } ;# interp exist
+
+    # reset timeout for slave interp at each new command income
+    if {$THIS(timeout) > 0} \
+    {
+      after cancel [$CLIENT(interp) eval set WD]
+      $CLIENT(interp) eval set WD [after [expr $THIS(timeout)*1000] "$CLASS(logout) $MY $CLIENT(interp)"]
+    }
+
+    # Effectively excecute remote procedure
+    set RET [$CLASS(exec) $MY $CLIENT_ID]
+
+    switch -- [lindex $RET 0] \
+    {
+      HTML   {return $RET}
+      ERROR  {return $RET}
+    }
+
+    # lindex 0 of RET is not a one uper case word send it now
+    if {![regexp {^[A-Z]*$} [lindex $RET 0]]} \
+    {
+      # build or HTML answer header
+      lappend CLIENT(header) "HTTP/1.0 200 Data follows"
+      lappend CLIENT(header) "Date: [$CLASS(date) $MY [clock second]]"
+      lappend CLIENT(header) "Last-Modified: [$CLASS(date) $MY 0]"
+      lappend CLIENT(header) "Set-Cookie: interp=$CLIENT(interp); path=/; expires=[$CLASS(date) $MY [expr [clock seconds] + $THIS(timeout)]]"
+      lappend CLIENT(header) "Content-Type: text/html"
+      set     CLIENT(page)   $RET
+      return PAGE ;# everything is in client object
+    }
+
+    # complete filename with POST url dirname
+    if {![string match {/*} [lindex $RET 1]]} {
+      set ASKED_FILE [file join [file dirname $CLIENT(url)] [lindex $RET 1]]
+    } else {
+      set ASKED_FILE [lindex $RET 1]
+    }
+
+    # We need to parse answer in order adding some tags
+    set CLIENT(url) $ASKED_FILE
+    return [$CLASS(parse) $MY $CLIENT_ID [lindex $RET 0]]
+}
+
+# "Parse a file in order adding slave client interp cookie"
+# "this routine don't fill up length field in html header"
+# "this because we can't compute it from file status and a real"
+# "count would be to long and is useless for ascii file"
+# ----------------------------------------------------------------
+public parse {CLIENT_ID TYPE} \
+{
+    global env
+    upvar #0 $CLIENT_ID CLIENT
+
+    # In keep alive mode Interp already exist and we bypass all cookies test
+    if {![info exists CLIENT(interp)]} \
+    {
+      # Check we effectively received a cookie from our browser
+      if {! [info exists CLIENT(cookie)]} \
+      {
+        return [$CLASS(error) $MY 400 $CLIENT(url) "You should login first"]
+      }
+
+      # search interpretor in cookies list
+      foreach COOKIE $CLIENT(cookie) \
+      {
+        switch -- [lindex $COOKIE 0]\
+        {
+          interp {set CLIENT(interp) [lindex $COOKIE 1]}
+        }
+      } ;# end foreach
+
+      # Check we effectively received a cookie from our browser
+      if {! [info exists CLIENT(interp)]} \
+      {
+        return [$CLASS(error) $MY 400 $CLIENT(cookie) "Invalid Cookie not an Interp"]
+      }
+
+      # Check slave interp still exist if not send login page
+      if {![interp exists $CLIENT(interp)]} \
+      {
+        unset  CLIENT(interp)
+        return [$CLASS(error) $MY 400 Timeout "Login timeout please login again"]
+      }
+    }
+
+    # Check file effectively exist
+    set FILE [$CLASS(openUrl) $MY $CLIENT(url)]
+    if {[lindex $FILE 0] == "ERROR"} \
+       {return [$CLASS(error) $MY 404 $CLIENT(url) "Invalid filename [lindex $FILE 1]"]}
+
+    # Build http Header
+    lappend CLIENT(header) "HTTP/1.1 200 Data follows"
+    lappend CLIENT(header) "Set-Cookie: interp=$CLIENT(interp); path=/; expires=[$CLASS(date) $MY [expr [clock seconds] + $THIS(timeout)]]"
+    lappend CLIENT(header) "Last-Modified: [$CLASS(date) $MY [file mtime [lindex $FILE 1]]]"
+    lappend CLIENT(header) "Content-Type: text/html"
+    lappend CLIENT(header) "Date: [$CLASS(date) $MY 0]"
+    set FD [lindex $FILE 0]
+
+    switch -- $TYPE \
+    {
+
+      TCLET { ;# parse Tclet loader in order adding interp cookie
+        while {![eof $FD]} \
+        {
+          set LINE [gets $FD]
+          if [regsub {[ \t]*<embed.*[^>]} $LINE "& interp=$CLIENT(interp)" RES] \
+          {
+            lappend CLIENT(page) $RES
+            } else {
+            lappend CLIENT(page) $LINE
+          }
+        }
+        return PAGE
+      }
+
+      JAVA   { ;# paser Java applet html contener in order adding slave interp
+        while {![eof $FD]} \
+        {
+          set LINE [gets $FD]
+          if [regexp {[ \t]*<APPLET[ \t]CODE.*>} $LINE] \
+          {
+            lappend CLIENT(page) $LINE
+            lappend CLIENT(page) "<PARAM NAME=server VALUE=\"$THIS(host)\">"
+            lappend CLIENT(page) "<PARAM NAME=port   VALUE=\"[expr $THIS(port) + 1]\">"
+            lappend CLIENT(page) "<PARAM NAME=interp VALUE=\"$CLIENT(interp)\">"
+
+            } else {
+            lappend CLIENT(page) $LINE
+          }
+        }
+        return PAGE
+      }
+
+      URL   { ;# Parse file and return result
+        while {![eof $FD]} \
+        {
+          set LINE [gets $FD]
+          if [regexp {^[ \t]*<tcl=(.+)>} $LINE x CMD] \
+          {
+            catch {interp eval $CLIENT(interp) $CMD} RES
+            lappend CLIENT(page) $RES
+            } else {
+            lappend CLIENT(page) $LINE
+          }
+        }
+        return PAGE
+      }
+
+    } ;# end switch
+
+  } ;# "end parse"
+
+  # "alias add command in slave interp"
+  # -----------------------------------
+  public alias {CLIENT_ID} \
+  {
+  }
+
+  # "login method create a slave interpretor and then call eval method"
+  # -------------------------------------------------------------------
+  public login {CLIENT_ID}
+  {
+    #upload client object in server context
+    upvar #0 $CLIENT_ID CLIENT
+
+    # before accepting a new login check we are not already logged
+    if [info exist CLIENT(cookie)] \
+    {
+     set CLIENT(interp) {}
+     foreach COOKIE $CLIENT(cookie) \
+     {
+       switch -- [lindex $COOKIE 0]\
+       {
+         interp \
+         {
+           if [interp exists [lindex $COOKIE 1]] \
+             {return [$CLASS(error) $MY 400 $CLIENT(url) "\nYou are already logged in \[use logout to quit\]"]}
+         }
+       }
+     } ;# end foreach
+    }
+
+    # Create Tcl slave interpretor an attach it to client
+    set CLIENT(interp) [interp create I_[clock clicks]]
+
+    # We need PKG_STATE in slave order sourcing jTcl package
+    $CLIENT(interp) eval "set PKG_STATE $THIS(jTclState)"
+
+    # try sourcing all slave package from auto dir
+    set STATUS [$CLIENT(interp) eval \
+     " foreach {PKG_DIR FILE} \"$THIS(jTclPath)\" {
+       if \[catch {source \$PKG_DIR/Etc/\$FILE} \] {
+        return \[list \$PKG_DIR/Etc/\$FILE \$errorInfo\] }}
+       return OK \
+     "]
+
+    # if source package failed return error message to Netscape
+    if {$STATUS != "OK"} {
+      regsub -all "\n" [lindex $STATUS 1] {<br>} ERRINFO
+      return [$CLASS(error) $MY 400 [lindex $STATUS 0] $ERRINFO]
+    }
+
+    # startup slave module in order initing programs
+    set STATUS [$CLIENT(interp) eval \
+     "if \[catch {startup}\] {return \$errorInfo}
+       return OK \
+     "]
+
+    if {$STATUS != "OK"} {
+      # move errorInfo to a valid HTML string
+      regsub -all "\n" $STATUS {<br>} STATUS
+      return [$CLASS(error) $MY 400 "slave:$CLIENT(interp)" "$STATUS"]
+    }
+
+    # Set a watchdog for auto logoff WARNING: watchdog must be store in slave interpt
+    # because each new page will create a new client under httpd
+    if {$THIS(timeout) > 0} \
+    {
+      $CLIENT(interp) eval set WD .
+    }
+
+    # login is sucessfull create logout command
+    interp alias $CLIENT(interp) cleanup {} $CLASS(logout) $MY $CLIENT(interp)
+    $CLIENT(interp) eval set INTERP $CLIENT(interp)
+
+    # before calling login sequence add alias command in slave
+    $CLASS(alias) $MY $CLIENT_ID
+
+    # Check application accept a new session
+    set RET [$CLASS(eval) $MY $CLIENT_ID]
+
+    # If authentification is refused then delete slave interpretor
+    if {[lindex $RET 0] == "ERROR"} \
+    {
+      $CLASS(logout) $MY $CLIENT(interp)
+      unset CLIENT(interp)
+      return [$CLASS(error) $MY 400 [lindex $RET 1] "Login Autentification refused"]
+    }
+
+    return $RET
+
+  } ;# "end login"
+
+  # "Mime method is call at each end of HTTPD input header"
+  # -------------------------------------------------------
+  public mime {EXT CLIENT_ID}
+  {
+     switch -- $EXT \
+     {
+
+       {.login}  {  # If authentification call login method
+           return [$CLASS(login)  $MY $CLIENT_ID]
+         }
+
+       {.logout} { # Logout call user proc and then clean up place
+         upvar #0 $CLIENT_ID CLIENT
+         set RET [$CLASS(eval) $MY $CLIENT_ID]
+         if {$CLIENT(errno) == ""} {
+           $CLASS(logout) $MY $CLIENT(interp)
+         }
+         return $RET
+       }
+
+       {.rpc} { # If we are not concerned by this mime extention pass true
+          return [$CLASS(eval) $MY $CLIENT_ID]
+         }
+
+       {.htt}    {return [$CLASS(parse) $MY $CLIENT_ID TCLET]}
+       {.htj}    {return [$CLASS(parse) $MY $CLIENT_ID JAVA]}
+       {.htcl}   {return [$CLASS(parse) $MY $CLIENT_ID URL]}
+     }
+
+     # All unknow mime extention are passed to our super class
+     return [$SUPER $MY $EXT $CLIENT_ID]
+
+  } ;# "end mime"
+
+  # "rpc constructor"
+  # ------------------
+  TcpHttpdRpc {PORT ROOT_DIR {AUTO {}} {INDEX {}}}
+  {
+    # override index if needed
+    if {$INDEX != {}} {set THIS(index) $INDEX}
+
+    # Prepare slave and jTcl Package for login time
+    set THIS(jTclState) [lindex [jClassName {jTcl.state.*}] 0]
+    set THIS(jTclPath) "[jClassName {jTcl.pkg.dir.*}] Package.jTcl"
+
+    # Loop in autopath and retreive all Package.jTcl and Slave.jTcl
+    foreach PATH  $AUTO \
+    {
+      if {![file isdirectory $PATH]} \
+        {$MY signal "autopath not a valid direcory: $PATH"}
+
+      if [file exists $PATH/Etc/Slave.jTcl] \
+        {
+          lappend THIS(jTclPath) $PATH
+          lappend THIS(jTclPath) Slave.jTcl
+        }
+
+    } ;# end foreach
+
+    # create a new rpc and set some minimum methode
+    $SUPER $MY $PORT $ROOT_DIR
+
+  } ;# "end Rpc constructor"
+
+} ;# "end TcpHttpdRpc Class"

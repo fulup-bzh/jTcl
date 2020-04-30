@@ -1,0 +1,51 @@
+<comment>
+; $Header: /Master/jTcl/zDemo/Rpc/server/Html/in.htcl,v 1.2 1999/03/08 08:34:20 fulup Exp $
+;
+;  Copyright(c) 1996-97 FRIDU a Free Software Company
+;
+; File      :   in.htcl return slave interp name
+; Projet    :   Fridu a Realtime Booster
+; SubModule :   jTcl Java-like TCL and Fridu TCL extention
+; Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+;
+; Last
+;      Author      : $Author: fulup $
+;      Date        : $Date: 1999/03/08 08:34:20 $
+;      Revision    : $Revision: 1.2 $
+;      Source      : $Source: /Master/jTcl/zDemo/Rpc/server/Html/in.htcl,v $
+;      State       : $State: Exp $
+;
+; Modification History
+; --------------------
+; 01a,29mar97,fulup Written
+;
+;
+</comment>
+
+<html>
+<body bgcolor="#ffffff">
+<p>
+
+<p>
+ You have been succesfully logged under jTcl RpcHttpd server.
+ All your Rpc commands request will be interpreted under a private
+ Slave Interpretor:
+<b>
+<tcl=set INTERP>
+</b>
+<p>
+ This operation as create a cookie in your browser, this cookie is valid
+ 15mn, after this timeout jTcl RpcHttpd will automaticaly relased all
+ resources attached to your browser.
+
+<p>
+ You can now use set/get adress commande from index in left frame
+ of you browser.
+
+<p>
+ Your adress will be serialized on logout on:
+<b>
+ <tcl=$HTML_ADR_ID get fileName>
+</b>
+</body>
+</html>

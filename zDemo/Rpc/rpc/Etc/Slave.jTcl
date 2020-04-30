@@ -1,0 +1,48 @@
+# $Header. /Master/config/header/header.sh,v 1.2 1997/02/01 17.29.30 fulup Exp $
+#
+#  Copyright(c) 1997 FRIDU a Free Software Company
+#
+# File      :   pakages.jTcl Main Tcl entry
+# Projet    :   Demo
+# SubModule :   RpcAdr
+# Auteur    :   Fulup Ar Foll [fulup@fridu.bzh]
+#
+# Last
+#      Author      : $Author. fulup $
+#      Date        : $Date. 1997/02/01 17.29.30 $
+#      Revision    : $Revision. 1.2 $
+#      Source      : $Source. /Master/config/header/header.sh,v $
+#      State       : $State. Exp $
+#
+# Modification History
+# --------------------
+# 01a,22nov97, fulup written
+#
+
+# dont include this file more than one
+# ------------------------------------
+if {![info exist RPC.PACKAGE.LOADED]} \
+{
+  set RPC.PACKAGE.LOADED TRUE
+
+  # Set release symbolic name
+  # -------------------------
+  set _RPC_REL 0.01
+
+  # Register Save package
+  jClassRegister demo.rpc.state    $_RPC_REL "$PKG_STATE $_RPC_REL"
+  jClassRegister demo.rpc.adr      $_RPC_REL  $PKG_DIR/Tcl/rpcAdrDemo.jTcl
+
+  # clean up tempry varaibles
+  foreach VAR [info var _RPC_*]   { unset $VAR }
+
+} ;# end if already loaded
+
+# Excuted when all autopathed slaves.jTcl are be loaded
+# ------------------------------------------------------
+proc startup {} \
+{
+  # In our demo program as to be load by hand because not in autopath
+  jClassImport {demo.rpc.adr.*}
+
+} ;# end startup

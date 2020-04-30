@@ -1,0 +1,414 @@
+#  Copyright(c) 1996-97 FRIDU a Free Software Company (fridu@fridu.bzh)
+#
+# File      :   jClasang.tcl Interface for jTcl to run as a tclet
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   jTcl Etc
+# Auteur    :   Fulup Ar Foll [fulup@fridu.bzh]
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/lang/Tcl/jClassLang.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01g,04may98,fulup added jClassModule
+# 01f,16mar98,fulup added a check on jClassRegister and change jClassDump
+# 01e,29jan98,fulup added a dummy debug.proc in order make debug import facultative
+# 01d,13jan98,fulup added DLL loading facility
+# 01c,20sep97,fulup changed name and add jClassRegister
+# 01b,20jun97,fulup added dev and production path for tclet search
+# 01a,20may97,fulup written
+#
+
+#---------------------------------------------------------------
+# Interface Tcl module file sourcing, when running in a slave
+# interpretor as a tclet we can only source Tcl library, if
+# jTcl is not properly installed we download it from network
+#---------------------------------------------------------------
+
+# Start with an empty waiting file list
+# -------------------------------------
+set env(includeList) {}
+set env(startupList) {}
+set env(includeWait) 0
+set JTCL_IND         0
+
+
+# Provide an empty debug proc until effective is loaded
+proc debug.msg  {args} {}
+proc debug.proc {NAME PARAMS BODY} {proc $NAME $PARAMS $BODY}
+
+# Class provided for documentation extration header
+proc jClassModule {MODULE args} {}
+
+# In tclet enviroment we have to trap class in order
+# delay class link until all dependencies are loaded.
+# ---------------------------------------------------
+if [info exist embed_args] \
+{
+ # Create a widget for displaying loaded file
+ frame   .jTcl
+ pack    .jTcl
+
+ label   .jTcl.intro -text "jTcl classes load in progress"
+ set _INCLUDELANG   [frame   .jTcl.files]
+
+ listbox $_INCLUDELANG.asked
+ listbox $_INCLUDELANG.loaded
+ $_INCLUDELANG.asked  insert 0 "Asked files"
+ $_INCLUDELANG.loaded insert 0 "Loaded files"
+ pack $_INCLUDELANG.asked $_INCLUDELANG.loaded -side left
+ pack    .jTcl.intro .jTcl.files -side top
+
+
+ # setup class proc in order traping all class registration
+ # this action is mandatory because tclet are asynchronousely loaded
+ # and there is no way to garanty a logical order. We thus store
+ # all class and when load is finish, we try link them in order.
+ # -------------------------------------------------------------------
+ proc class {CLASS_NAME EXTENTS METHODS} \
+ {
+  global _CLASSLIST _SUPERLIST
+
+  # search for extends classes
+  for {set IND 0} {$IND < [llength $EXTENTS]} {} \
+  {
+     # if extends keyword found add class name in our super class dependencies list
+     set SLOT [lindex $EXTENTS $IND]
+     if {$SLOT == "extends"} \
+      {
+        incr IND
+        lappend SUPERCLASS [lindex $EXTENTS $IND]
+        incr IND
+      } else {
+        # ignore comment and stop on any unknow word
+        if [string match {#*} "$SLOT"]  \
+        {
+          incr IND +2
+        } else {
+          error "ERROR: when parsing extends |$CLASS_NAME| token=|$SLOT|"
+        }
+      } ;# end if slot
+   } ;# end for
+
+   # if no super class (ususaly Object class only)
+   if {![info exists SUPERCLASS]} {set SUPERCLASS _NoSuper}
+
+   # add derivated class in super class array
+   lappend _SUPERLIST($SUPERCLASS) $CLASS_NAME
+
+   # save class in class array
+   set _CLASSLIST($CLASS_NAME) [list $EXTENTS $METHODS]
+
+ } ;# end class
+
+ # try implementing class (need all file from tclet to be loaded)
+ # --------------------------------------------------------------
+ proc jClassLink {} \
+ {
+  global _CLASSLIST _SUPERLIST _JTCL
+
+  #start implementing class with no super class [usualy Object]
+  if [info exists _SUPERLIST(_NoSuper)]  \
+  {
+    foreach CLASS $_SUPERLIST(_NoSuper) \
+    {
+      if [catch {eval lang.object.class $CLASS $_CLASSLIST($CLASS)} ERR] \
+      {
+        error "$CLASS extends $SUPER_ID error=|$ERR|"
+      }
+
+      # free Object waiting class array
+      unset _CLASSLIST($CLASS)
+    }
+
+    # Clean up no super class slot
+    unset _SUPERLIST(_NoSuper)
+  }
+
+  # Loop until all class are implemented
+  set NB_UNRESOLVED [array size _CLASSLIST]
+  while {$NB_UNRESOLVED > 0} \
+  {
+    #puts "_CLASSLIST = [array names _CLASSLIST]"
+    #puts "_SUPERLIST = [array names _SUPERLIST]"
+    # Loop on dependencies super class list
+    foreach SUPER_ID [array names _SUPERLIST] \
+    {
+      set SUP_IMPLEMENTED 1
+
+      # Check our super classes (may be many) are all implemented
+      foreach SUP $SUPER_ID \
+      {
+        upvar #0 _C_$SUP SUPER
+        if {![info exists SUPER(my)]} {set SUP_IMPLEMENTED 0}
+      }
+
+      # If extention class is implemented try implenting derivated class
+      if {$SUP_IMPLEMENTED} \
+      {
+        # our super class exists implement derivated classes
+        foreach CLASS $_SUPERLIST($SUPER_ID) \
+        {
+          if [catch {eval lang.object.class $CLASS $_CLASSLIST($CLASS)} ERR] \
+          {
+             error "$CLASS extends $SUPER_ID error=|$ERR|"
+          }
+          unset _CLASSLIST($CLASS)
+        }
+        unset _SUPERLIST($SUPER_ID)
+      }
+    };# end foreach Super
+
+    # checkup unimplemented class number evolution
+    set PREV $NB_UNRESOLVED
+    set NB_UNRESOLVED [array size _CLASSLIST]
+
+    # If we don't implement any more exit
+    if {$NB_UNRESOLVED == $PREV} \
+    {
+      error "ERROR can't link all classes |[array names _CLASSLIST]|
+             can't find super class |[array names _SUPERLIST]|"
+    }
+  } ;# end while array size
+ } ;# end jClassLink
+
+ # Update browser status
+ # ---------------------
+ proc jClassLoaded {URL} \
+ {
+  global env
+  global embed_args
+  global _INCLUDELANG
+
+   incr env(includeWait) -1
+
+   # add file in loaded file list
+   $_INCLUDELANG.loaded insert end [list $env(includeWait) $URL]
+   update
+
+   # do we have a file waiting to be loaded ?
+   # ----------------------------------------
+   if {$env(includeList) != {}} \
+   {
+     # Popup next file to include and load it
+     set NEXT [lindex $env(includeList) 0]
+     incr env(includeWait) +1
+     jLoadSourceURL $NEXT  jClassLoaded
+     set env(includeList) [lrange $env(includeList) 1 end]
+   }
+
+   # If no more file waiting to be include link classes and startup tclet
+   if {$env(includeWait) == 0} \
+   {
+     set SERVER [getattr originHost]
+     set PORT   [getattr originPort]
+
+     # First link all our classes
+     jClassLink
+
+     # Release package browser and take safeSocket (can't have both activ at a time)
+     if {[info exists embed_args]} \
+     {
+       destroy .jTcl
+       # build startup name and try it
+       set STARTUP [file rootname [file tail $embed_args(tclet)]].startup
+       if {[catch {$STARTUP $SERVER [expr $PORT +1]} ERR]} \
+       {
+          error "ERROR in $STARTUP procedure ERR=|$ERR|"
+       }
+     }
+   }
+ } ;# end jClassLoaded
+
+} ;# if in tclet
+
+# jClassLoad include a file in either local or tclet mode
+# -----------------------------------------------------
+proc jClassLoad {REFERENCE} \
+{
+ global embed_args
+ global env
+ global tcl_library
+
+
+ # Filename is in first slot of reference
+ set FILENAME [lindex $REFERENCE 0]
+
+ # If not a safe interpretor try loading
+ if {![info exists embed_args]} \
+ {
+   # check for full path
+   if {! [file isfile $FILENAME]} \
+   {
+     puts "WARNING: $FILENAME is not a valid filename"
+     return ERROR
+   }
+
+   switch [file extension $FILENAME] \
+   {
+    .jTcl {
+     if [info exists env(JTCL_DEBUG)] \
+      {puts  "jClassLoad sourcing $FILENAME"}
+     uplevel #0 source $FILENAME
+     return OK
+    }
+    .dll -
+    .so  {
+     if [info exists env(JTCL_DEBUG)] \
+      {puts  "jClassLoad loading $REFERENCE"}
+      if [info exist env(LD_LIBRARY_PATH)] \
+      {
+        set env(LD_LIBRARY_PATH) \
+	   "$env(LD_LIBRARY_PATH):[file dirname $FILENAME]"
+      } else {
+        set env(LD_LIBRARY_PATH) "[file dirname $FILENAME]"
+      }
+      eval load $REFERENCE
+    }
+    default {
+     puts "WARNING: Unknow loading extention for $FILENAME"
+     return ERROR
+    }
+   } ;# end switch
+
+ } else {
+
+   # add file in list
+   global _INCLUDELANG
+   $_INCLUDELANG.asked insert end $FILENAME
+   update
+
+   # if jTcl package not already loaded do it now
+   global JTCL.PACKAGE.LOADED
+   if {![info exist JTCL.PACKAGE.LOADED]} \
+   {
+      # When this will be done try to load user asked file
+      lappend env(includeList) $FILENAME
+
+      # Nothing is possible without jTcl package import array
+      incr env(includeWait) +1
+
+      # Check if we are in production or development tree
+      if {$embed_args(state) == "dev"} \
+      {
+        jLoadSourceURL /Etc/packages.tcl jClassLoaded
+      } else {
+        jLoadSourceURL /lib/jTcl/Etc/packages.tcl jClassLoaded
+      }
+
+      return
+   }
+
+   # No file are waiting just load our
+   if [catch {source  $FILENAME}] \
+   {
+      # WARNING: in order this to work jLoad should previousely loaded
+      incr env(includeWait) +1
+      jLoadSourceURL $FILENAME jClassLoaded
+   }
+ }
+} ;# end jClassLoad
+
+# registrated a new entry in jTcl.import array
+# --------------------------------------------
+proc jClassRegister {PACKAGE REL PATH} \
+{
+ global JTCL_FILE
+ global env
+
+ if [info exists JTCL_FILE($PACKAGE.$REL)] \
+ {
+   puts "Warning: $PACKAGE.$REL already registrated"
+   puts "         previous=$JTCL_FILE($PACKAGE.$REL)"
+   error "abort"
+ }
+
+ set JTCL_FILE($PACKAGE.$REL) $PATH
+
+ # in debug mode check file effectivelly exist
+ if [info exist env(JTCL_DEBUG)] {
+     if {([file extension $JTCL_FILE($PACKAGE.$REL)] == ".jTcl")
+        && ![file exist $JTCL_FILE($PACKAGE.$REL)]} {
+       puts "WARNING: label |$PACKAGE.$REL| no file |$JTCL_FILE($PACKAGE.$REL)|"
+     }
+ }
+
+} ;# jClassRegister
+
+# jTcl package importe routine check if product is already load
+# and is not try to load it either from disk or from network
+# -------------------------------------------------------------
+proc jClassImport {PATERN} \
+{
+ global JTCL_IND
+ global JTCL_IMPORTED
+ global JTCL_FILE
+ global env
+ set    STATUS {}
+
+ set LIST [array names JTCL_FILE $PATERN]
+
+ if {$LIST == {}} \
+ {
+   # Dont display message for .auto.start modules
+   if {[file extension $PATERN] != ".start"} \
+     {puts "WARNING: jClassImport $PATERN fit no jTcl modules"}
+ }
+
+ # Take higher version first
+ foreach FILE [lsort -decreasing $LIST] \
+ {
+   # source as to be done at global level
+   if {! [info exists JTCL_IMPORTED($FILE)]} \
+   {
+     jClassLoad $JTCL_FILE($FILE)
+     incr JTCL_IND
+     set JTCL_IMPORTED($FILE) $JTCL_IND
+   }
+ }
+} ;# end jClassImport
+
+# get name attached to a label
+# ----------------------------
+proc jClassName {PATERN} \
+{
+ global JTCL_IND
+ global JTCL_IMPORTED
+ global JTCL_FILE
+ global env
+ set    STATUS {}
+
+ set LIST [array names JTCL_FILE $PATERN]
+
+ if {$LIST == {}} \
+ {
+   error "WARNING: jClassName $PATERN fit no jTcl modules"
+ }
+
+ # return first higher version
+ return $JTCL_FILE([lindex [lsort -decreasing $LIST] 0])
+} ;# end jClassName
+
+
+# Check loaded modules under jTcl
+# -------------------------------
+proc jClassDump {} \
+{
+ global JTCL_IMPORTED
+ global JTCL_FILE
+
+ # first gived loaded modules
+ foreach SLOT [array names JTCL_IMPORTED] \
+ {
+     lappend LST [list $JTCL_IMPORTED($SLOT) $SLOT]
+ }
+ lappend RET  [lsort -integer -index 0 $LST] \
+
+ # second gives avaliable modules
+ lappend RET  [lsort [array names JTCL_FILE]]
+
+} ;# end jClassDump

@@ -1,0 +1,319 @@
+# $Header: /Master/jTcl/zDemo/Tcp/server/Tcl/chatTcpDemo.jTcl,v 1.2 1999/03/08 08:34:20 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# Chat      :   chatTcpDemo.tcl Chating module
+# Projet    :   jTcl-Demo
+# SubModule :   Tcp/server
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:20 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/Tcp/server/Tcl/chatTcpDemo.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01d,20jan98,fulup add pseudo/allow/deny for IUP(GIS2) exam
+# 01c,01dec97,fulup adapted to jTcl-3.x
+# 01b,18mar97,fulup Corrected presentation on message display
+# 01a,12mar97,fulup written as correction to DU97 client/server test.
+#
+
+#--------------------------------------------------------------------
+# This program is a TCP server chat server
+# Each new client recevie a welcome message whith previous client list
+# Each client recieve an annonce when a new client come in
+# Each message are broadcast to all client, a message is compose of
+# many lines finish by an empty line
+# Note: This is an exam correction students had 1h30 to code it.
+#--------------------------------------------------------------------
+
+# Import mandatory modules
+# -------------------------
+package require jTcl
+jClassImport {tcp.server.*}
+
+# This class will handle all incomming client communications
+# ----------------------------------------------------------
+class DemoChatCl {extends TcpServerCl} \
+{
+  # "We need a dummy pseudo in case user dont fill it/pMaster/Fridu"
+  set pseudo    Unset    ;# "No default pseudonyme"
+  set moderator 0        ;# "Default user is not a moderator"
+
+  # "This routine echo all character on chat channel for incomming channel"
+  # -----------------------------------------------------------------------
+  public read {} \
+  {
+   set IN_LINE [gets $THIS(in)]
+
+   # If abnormal client end force call to quit command
+   if {[eof $THIS(in)]} \
+   {
+      $THIS(server) process $MY quit
+      free   $MY
+      return
+   }
+
+   # if line is not empty we are facing a command line
+   if {$IN_LINE != {}} \
+   {
+       lappend THIS(buffer) $IN_LINE
+       return
+   }
+
+   # we are now facing a complete command call ChatSv method to process it
+   set REPONSE [$THIS(server) process $MY $THIS(buffer)]
+
+   # Normal client end (it send quit for leaving now)
+   if {$REPONSE == "exit"} \
+   {
+       puts   $THIS(out) "Kenavo da wec'h all"
+       flush  $THIS(out)
+       free   $MY
+       return
+   }
+
+   # send all reponse word to client
+   foreach SLOT $REPONSE \
+   {
+     puts  $THIS(out) $SLOT
+   }
+   puts  $THIS(out)    "?"
+   flush $THIS(out)
+   set   THIS(buffer)  {}
+
+  } ;# "end read"
+
+  # "use authentifaction method to send wellcome message"
+  # -----------------------------------------------------
+  public auth {} \
+  {
+   # Check incomming client is not unwated server IP list
+   if {![lsearch [$THIS(server) get unwantedIP] $THIS(host)]} {
+     puts $THIS(out) "---------------------------------------------------------"
+     puts $THIS(out) "Sorry $THIS(host) is registred in my unwanted IP adresses"
+     puts $THIS(out) " ... kenavo ..."
+     puts $THIS(out) "---------------------------------------------------------"
+     return FX
+   }
+
+   puts $THIS(out) "\nWelcome $MY to chat.  Syntax is:"
+   puts $THIS(out) "--------------------------------"
+   puts $THIS(out) "Command pseudo|send|who|quit"
+   puts $THIS(out) "... message ...."
+   puts $THIS(out) "\\n An emply line\n?"
+   flush $THIS(out)
+
+   # Subcontract server for broadcasting our income
+   # -----------------------------------------------
+   $THIS(server) process $MY "send [list "Hello I am $MY from $THIS(host)"]"
+
+   return OK   ;# We don't care about authentification
+  } ;# "end auth"
+
+  # "Constructor called at each client accept"
+  # ------------------------------------------
+  DemoChatCl {SERVER_ID HOST SOCK PORT}
+  {
+    # Only super Class constructor need this
+    $SUPER $MY $SERVER_ID $HOST $SOCK $PORT
+  }
+
+} ;# end class DemoChatCl
+
+# ChatSv class handle remote command evalution under tcl interpretor
+# ------------------------------------------------------------------
+class DemoTcpChat {extends TcpServer} \
+{
+ static clientsClass DemoChatCl    ;# "override server client class"
+ static secure       1             ;# "we use auth proc"
+ set    unwantedIP   {}            ;# "start with an empty unwanted list"
+ set    passwd       TutuTitiTata  ;# "Moderator default password"
+ # "Leave when less than 1 client [no Client]"
+ set clientsMin 1
+
+  # "Bradcast a message to all client except the one that send it"
+  # --------------------------------------------------------------
+  public broadcast {SENDER_ID MESSAGE}
+  {
+    # get client pseudo before broadcasting
+    set PSEUDO [$SENDER_ID get pseudo]
+
+    foreach CLIENT_ID $THIS(clientsAddr) \
+    {
+       # don't resend message to ourself
+       if {$CLIENT_ID == $SENDER_ID} continue
+
+       $CLIENT_ID write "\n--------------------------------------------------------"
+       $CLIENT_ID write "Message from $SENDER_ID pseudo: $PSEUDO\n"
+       foreach LINE $MESSAGE \
+       {
+         $CLIENT_ID write $LINE
+       }
+       $CLIENT_ID write "--------------------------------------------------------"
+    }
+  } ;# "end broadcast"
+
+  # "Process a user command"
+  # ------------------------
+  public process {CLIENT_ID REQUEST} \
+  {
+    set COMMAND  [string trim [lindex $REQUEST 0]]
+    set MESSAGE  [lrange $REQUEST 1 end]
+
+    switch -- $COMMAND \
+    {
+      {who} \
+        {
+          # Return connected client list
+          set ANSWER "Connected client: $THIS(clientsAddr)"
+        }
+      {send} \
+        {
+          # Broascast message to all clients
+          $CLASS(broadcast) $MY $CLIENT_ID $MESSAGE
+          set ANSWER        "Message Sent"
+        }
+      {quit} \
+        {
+          # Broadcast quit message to all clients
+          $CLASS(broadcast) $MY $CLIENT_ID [list "I am leaving see you later"]
+          set ANSWER        "exit"
+
+        }
+
+      {pseudo} \
+       {
+         # Replace CLIENT_ID with a pseudo we save it in client agent
+	 $CLIENT_ID set pseudo "$MESSAGE"
+	 set ANSWER "pseudo set to: $MESSAGE"
+       }
+
+      {moderator} \
+       {
+         # Only localhost can use administation commands"
+         if {[$CLIENT_ID get host] !=  "127.0.0.1"} {
+	    set ANSWER "Sorry this host cannot access moderator privilege"
+
+         } else {
+
+	   # Check Moderator password (first line of message)
+	   set PASSWD [lindex $MESSAGE 0]
+	   if {$PASSWD != $THIS(passwd)} {
+	    set ANSWER "Invalid password"
+	   } else {
+	    $CLIENT_ID set moderator 1
+	    set ANSWER "Mode moderator validated commands allow|deny operationnal"
+          }
+	}
+       }
+
+      {deny} \
+       {
+         # Only moderator administation commands"
+         if {![$CLIENT_ID get moderator]} {
+	    set ANSWER "Sorry you are not allowed to use deny command"
+
+         } else {
+
+	   # If client does not exist send a message to the administrator
+	   global $CLIENT_ID
+	   if {![info exist $CLIENT_ID]} {
+	     set ANSWER "ERROR: CLIENT_ID=$CLIENT_ID does not exist"
+	   } else {
+	     # ClientId is in first MESSAGE line
+	     set CLIENT_ID [lindex $MESSAGE 0]
+
+	     # send a message to unwanted user
+	     $CLIENT_ID write  "--------------------------------------------------"
+	     $CLIENT_ID write  "Message from moderator:"
+	     foreach LINE $MESSAGE {
+	      $CLIENT_ID write $LINE
+	     }
+	     $CLIENT_ID write "---------------------------------------------------"
+
+	     # add this client agent IP adress in unwanted list
+	     lappend THIS(unwantedIP) [$CLIENT_ID get host]
+
+	     # Send a confiramtion message to administrator
+	     set ANSWER "CLIENT_ID: $CLIENT_ID on IP: [$CLIENT_ID get host] denied"
+
+             # close client
+	     free $CLIENT_ID
+           }
+	 }
+       } ;# end deny
+
+       # remove an IP adress from unwantedIp
+       {allow} \
+       {
+         # Only moderator can use administation commands"
+         if {![$CLIENT_ID get moderator]} {
+	    set ANSWER "Sorry you are not allowed to use allow command"
+
+         } else {
+
+	   # get IP adress to allow from message
+	   set IP [lindex $MESSAGE 0]
+
+	   # Check IP is effectively in unWantedIP list
+	   if {[lsearch $THIS(unwantedIP) $IP]} {
+	     set ANSWER "ERROR: IP=$IP not in deny list $THIS(unwantedIP)"
+	   } else {
+	     # remove IP adresse from unwanted list
+	     set THIS(unwantedIP) [ldelete $THIS(unwantedIP) $IP]
+
+	     # send new deny list to administrator
+	     set ANSWER "IP: $IP allowed, new deny list is: $THIS(unwantedIP)"
+           }
+	 }
+       }
+
+      {default} \
+        {
+          # Just return a warning message
+          set ANSWER "ERROR. Unknow command \[$COMMAND\] use pseudo|who|send|quit"
+        }
+    }
+
+    return [list $ANSWER]
+
+  } ;# "end process"
+
+  # "DemoTcpChat constructor just pass to our super class PORT"
+  # ----------------------------------------------------------
+  DemoTcpChat {PORT}
+  {
+    $SUPER $MY $PORT
+  }
+
+} ;# end class DemoTcpChat
+
+# chat example start entry point
+# -----------------------------------
+proc demo.tcp.chatSv.start {{PORT 1234}} \
+{
+  global tk_library
+
+  set SERVER_ID [new DemoTcpChat $PORT]
+
+  # in tk we use waiting loop
+  if [info exists tk_library] {return $SERVER_ID}
+
+  # Check our chat slots
+  $SERVER_ID dump
+
+  # loop forever on event dispaching
+  puts "chat waiting for clients on port.$PORT \[use telnet localhost $PORT\] to connect"
+  $SERVER_ID vwait
+
+  free $SERVER_ID
+
+} ;# end demo.chat.start
+
+if {![info exists DEMO_IT]} {eval demo.tcp.chatSv.start [lindex $argv 0]}
+

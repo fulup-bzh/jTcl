@@ -1,0 +1,92 @@
+# $Header: /Master/jTcl/jTcl/ic/Tcl/httpdIc.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   HttpdIcDemo.tcl demonstrate icRule under a slave interpretor
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   tcl/jTcl/demo
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/ic/Tcl/httpdIc.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01b,19oct97,fulup addapted to new icHttpd autopath strategie
+# 01a,27may97,fulup written from
+#
+
+#--------------------------------------------------------------------
+# This web server start a RPC http server, is wait on two port at a
+# time 1234 for icServer request and 1235 for ic rule server request
+# Ic server is created at login time and keep alive even when applet
+# break connection. At each new connection it send back current
+# validated values.
+#--------------------------------------------------------------------
+
+  jClassImport {tcp.rpc*}
+  jClassImport {ic.server*}
+
+# derivate rpcHttpd server in order to add ic rules specific
+# commandes, in each new incomming slave.
+# -----------------------------------------------------------
+class IcHttpdSv {
+  extends TcpHttpdRpc
+} {
+  # "Default icEngine class to agregate at login time"
+  static engineClass IcRpcServer
+
+  # "logout cleanup ic rules instance Note we dont received CLIENT but interp"
+  # --------------------------------------------------------------------------
+  public logout {INTERP} \
+  {
+    # release icRules engine instance
+    interp eval $INTERP icFree
+
+    # finish cleaning true our super class
+    $SUPER $MY $INTERP
+  }
+
+  # "add needed command into save interp"
+  # -------------------------------------
+  public alias {CLIENT_ID} \
+  {
+     # upload client instance context
+     upvar #0 $CLIENT_ID CLIENT
+
+     # create a private instance of rules for our slave
+     set ENGINE [new IcRuleEngine all]
+
+     # registrate slave name in icRule
+     $ENGINE valid [list info.interp $CLIENT(interp)]
+
+     # add our rules engine instance accessible from slave
+     interp alias $CLIENT(interp) icEngine  {} $ENGINE
+     interp alias $CLIENT(interp) icFree    {} free $ENGINE
+
+  } ;# "end alias"
+
+  # "descructor free icServer server"
+  # ---------------------------------
+  free {} \
+  {
+     # free all remainding active ic engine
+     free $THIS(icServer)
+  }
+
+  # "Constructor build both icServer and ic Tcp socket"
+  # ------------------------------------------------
+  IcHttpdSv {PORT ROOT_DIR RULES AUTO INDEX}
+  {
+    # Start ic Rules server with apropriate parsed rules file
+    set RULES_FILE [file join $ROOT_DIR $RULES]
+    set THIS(icServer) [new $CLASS(engineClass) [expr $PORT +1] $RULES_FILE]
+
+    # effectively build httpd server true our super class
+    $SUPER $MY $PORT $ROOT_DIR $AUTO $INDEX
+  }
+} ;# "end icHttpdSv"

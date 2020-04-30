@@ -1,0 +1,76 @@
+# $Header: /Master/jTcl/zDemo/IcEngine/client/Tcl/clientIcDemo.jTcl,v 1.2 1999/03/08 08:34:19 fulup Exp $
+#
+#  Copyright(c) 1997  FRIDU a Free Software Company
+#
+# File      :   clientIcDemo.tcl - Tk remote interface for ic multimed server
+# Project   :   jTcl
+# SubModule :   demo/Ic
+# Author    :   Fulup Ar Foll fulup@iu-vannes.fr
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:19 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/IcEngine/client/Tcl/clientIcDemo.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01a,11nov97,fulup written
+#
+
+# "Import needed modules"
+# ----------------------------
+   package require Tk
+   package require jTcl
+   jClassImport {ic.jTk.*}
+
+# "Global object containt all embedded widget"
+# --------------------------------------------
+class DemoIcClient {extends Object} \
+  {
+
+  # "Constructor build all the Interface"
+  # -------------------------------------
+  DemoIcClient {ROOT HOST PORT} \
+  {
+    # "Subcontract our super class for connecting to icServer"
+    set JTK_ID [new jTkIcContainer $ROOT $HOST $PORT]
+
+    # "Build our Interface"
+    set HOST [new jTkIcEntry $JTK_ID HostName]
+    set INCR [new jTkIcEntry $JTK_ID HostIncremental]
+    set FULL [new jTkIcEntry $JTK_ID HostFull]
+    set RCMD [new jTkIcEntry $JTK_ID HostRcmd]
+
+    set DONE [new jTkIcButton $JTK_ID HostDone]
+
+    # "Pack our interface in a jTKFrame"
+    $JTK_ID pack $HOST $INCR $FULL $RCMD $DONE
+
+    # "Ask for default GUI values from icServer"
+    $JTK_ID send decorate HostAll
+
+  } ;# "end constructor"
+} ;# "DemoIcClient Class"
+
+# "DemoStartup proc create the ovject and return ID to caller"
+# ------------------------------------------------------------
+proc  demo.ic.client.start {{HOST localhost} {PORT ""}} \
+{
+  # default value don't work with argv default calling
+  if {$PORT == ""} {set PORT 1234}
+
+  # "create main application frame warning by convention it is called FRAME"
+  # ------------------------------------------------------------------------
+  frame .root -width 7c -height 5c -relief sunken -borderwidth 2
+  pack  .root -fill both -expand true
+
+  # "Create Interface on .root Frame"
+  set JIC_ID [new DemoIcClient .root $HOST $PORT]
+
+  return $JIC_ID
+}
+
+# "Autostart applicatin in development mode"
+if {![info exists DEMO_IT]} {demo.ic.client.start localhost [lindex $argv 1]}

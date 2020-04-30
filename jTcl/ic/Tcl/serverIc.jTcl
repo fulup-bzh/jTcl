@@ -1,0 +1,207 @@
+# $Header: /Master/jTcl/jTcl/ic/Tcl/serverIc.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company [fridu@fridu.bzh]
+#
+# File      :   serverIc.tcl ic server
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   tcl/jTcl/ic
+# Auteur    :   Fulup Ar Foll [fulup@fridu.bzh]
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/ic/Tcl/serverIc.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01k,24feb98,crepet special patch to handle possible errors when
+#                    sending rule engine answer to crashed remote clients
+# 01j,17feb98,crepet modified to improve debug information
+#                    when remote client crashes
+# 01i,11feb98,fulup added secure flag to be compliant with 3.00p5 TcpServer class
+# 01h,28jan98,fulup moved EOF at top of read for slow system (W95)
+# 01g,11nov97,fulup adapted to new dispatch strategy
+# 01f,29sep97,fulup added object owner in rule engine and engineClass
+# 01e,27may97,fulup tune incomming params decoding
+# 01d,19may97,fulup adapted to new object jIc rule engine
+# 01c,24mar97,fulup adapted to new rpc httpd derivated class
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep96,fulup written
+#
+
+# Include cTcl madatory routines
+# ------------------------------
+ jClassImport {tcp.rpc*}
+ jClassImport {ic.rule*}
+
+class IcRpcClient {extends TcpServerCl} \
+{
+  # "This define default rules engine class"
+  static engineClass IcRuleEngine
+
+  # "Ic demo take RPC command end as LF"
+  # ------------------------------------
+  public read {}
+  {
+
+   # If Eof free Channel
+   if {[eof $THIS(in)]} \
+   {
+      free   $MY
+      return EOF
+   }
+
+   # read command from network
+   set THIS(buffer) [gets $THIS(in)]
+
+   # Process remote command with RPC server eval method
+   set ANSWER [$THIS(server) eval $MY]
+
+   debug.msg ANSWER=$ANSWER
+
+   # return answer to client from rule engine
+   # checking if an error occurs (remote client is crashed, dead ?)
+   if [catch {
+           puts  $THIS(out) $ANSWER
+           flush $THIS(out)
+       } ERR] \
+   {
+       # send a signal about the error
+       $CLASS(signal) $MY $ERR
+
+       # remote client is dead, then destroy his agent
+       free $MY
+   }
+
+  } ;# "end read"
+
+  # "ic client should send and authentification line first"
+  public auth {} \
+  {
+    # read first request fril ic client
+    set REP [gets $THIS(in)]
+
+    # check this is effectively an icClient
+    if {[lindex $REP 0] != "icClient"} \
+    {
+      puts  $THIS(out) "ERROR: ic rules server authentification protocol abort connection |$REP|"
+      flush $THIS(out)
+      return ERROR
+    }
+
+    # check if we want an slave interp
+    if {[lindex $REP 1] == "interp"} \
+    {
+       set INTERP [lindex $REP 2]
+       if {![interp exists $INTERP]} \
+       {
+          puts  $THIS(out) "ERROR: ic rules server Unknow interp $INTERP"
+          flush $THIS(out)
+          return ERROR
+       }
+
+       # save interp for further use
+       set THIS(interp) $INTERP
+
+    } else {
+
+       # IF we don't run in a slave interp we have a private client rule
+       set THIS(engine) [new $CLASS(engineClass) $MY all]
+    }
+
+    # everything is suposed to be OK
+    return OK
+
+  } ;# "end auth"
+
+  free {}
+  {
+    # "when authentificatin is refuse engine is not created"
+    if [info exists THIS(engine)] {free $THIS(engine)}
+  }
+
+  IcRpcClient {RPC_ID HOST SOCK PORT}
+  {
+    $SUPER $MY $RPC_ID $HOST $SOCK $PORT
+  }
+
+} ;# "end IcRpcClient"
+
+# "This class just override vwait method in order leaving when no client present"
+# -------------------------------------------------------------------------------
+class IcRpcServer {extends TcpServer} \
+{
+  static clientsClass IcRpcClient
+  static secure 1    ;# "autentification is fatal"
+
+  # "Really eval command in slave interpretor"
+  # ------------------------------------------
+  public eval {CLIENT_ID}
+  {
+    #upload client object in server context
+    upvar #0 $CLIENT_ID CLIENT
+
+    # Now try to execute our remote command
+    debug.msg QUERY=$CLIENT(buffer)
+
+    set CMD    [lindex $CLIENT(buffer) 0]
+    set ACTION [lindex $CLIENT(buffer) 1]
+    set PARAMS [lrange $CLIENT(buffer) 2 end]
+
+    if [info exists CLIENT(interp)] \
+    {
+      # use global to slave intanciation rules
+      # client can do any action allowed in slave interp
+      set DONE [catch {$CLIENT(interp) eval $CMD doIt $ACTION [list $PARAMS]} RET]
+    }  else {
+      # execute in main interp in a private client rule instanciation
+      # note that first command word is replace by icEngine ID
+      # which limite client possibilities
+      set DONE [catch {eval $CLIENT(engine) doIt $ACTION [list $PARAMS]} RET]
+    }
+
+    # check for rule execution error
+    if {$DONE} {
+      debug.msg ERR=|$RET|
+      return [list ERROR Rules action failed |$RET|]
+    }
+
+    debug.msg RET=|$RET|
+    return [list $RET]
+
+  } ;# "end eval"
+
+  # "Create a Rpc server and read rules file"
+  # -----------------------------------------
+  IcRpcServer {PORT RULE_NAME}
+  {
+    global JTCL_DEBUG
+
+     # read rule file at global level
+     uplevel source $RULE_NAME
+
+     $SUPER $MY $PORT
+
+     # instanciate a dummy rule engine rule for checking syntaxe at startup time
+     if [info exists JTCL_DEBUG] \
+     {
+       # in debug mode we simulate an incomming client
+       set SOCK [socket localhost $PORT]
+       puts  $SOCK "icClient"
+       flush $SOCK
+       after 500    ;# leave some time for event loop to process message
+
+       # IF server is not instanciate we should have socket closed
+       if [eof $SOCK] \
+       {
+         puts stderr "ERROR: can't instanciate IcRuleEngine all msg:\[$SOCK\]"
+         exit
+       } else {
+         # we don't need any more this dummy client
+         close $SOCK
+       }
+     }
+  }
+} ;# "end IcRpcServer class"

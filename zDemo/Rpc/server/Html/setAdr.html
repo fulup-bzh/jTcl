@@ -1,0 +1,56 @@
+<comment>
+; $Header: /Master/jTcl/zDemo/Rpc/server/Html/setAdr.html,v 1.2 1999/03/08 08:34:20 fulup Exp $
+;
+;  Copyright(c) 1996-97 FRIDU a Free Software Company
+;
+; File      :   setAdr.html reading form for input httpd/rpc demo
+; Projet    :   Fridu a Realtime Booster
+; SubModule :   jTcl Java-like TCL and Fridu TCL extention
+; Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+;
+; Last
+;      Author      : $Author: fulup $
+;      Date        : $Date: 1999/03/08 08:34:20 $
+;      Revision    : $Revision: 1.2 $
+;      Source      : $Source: /Master/jTcl/zDemo/Rpc/server/Html/setAdr.html,v $
+;      State       : $State: Exp $
+;
+; Modification History
+; --------------------
+; 01a,29feb97,fulup Written
+;
+;
+</comment>
+
+<html>
+<head>
+<title>
+Examplefor new extended httpd class
+</title>
+</head>
+<body bgcolor="#ffffff">
+
+<p>  <center>
+    <b><font size=6>Enter your adress</b>
+  </center><p>
+<br>
+
+<br>
+<form action="adrSetHtml.rpc" target=frame.message method=POST>
+<table>
+<tr><th>Name      <th> <input type=text size=40 name=NAME>
+<tr><th>First Name<th><input type=text size=40 name=FIRST>
+<tr><th>Street    <th><input type=text size=40 name=STREET>
+<tr><th>Town      <th><input type=text size=40 name=TOWN>
+<tr><th>Zip       <th><input type=text size=40 name=ZIP>
+<tr><th>Tel       <th><input type=text size=40 name=TEL>
+<tr><th>email     <th><input type=text size=40 name=EMAIL>
+</table>
+
+<br>
+<input type=submit value="Send">
+<input type=reset  value="Clear">
+</form>
+</body>
+</html>
+

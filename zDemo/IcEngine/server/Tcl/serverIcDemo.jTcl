@@ -1,0 +1,111 @@
+# $Header: /Master/jTcl/zDemo/IcEngine/server/Tcl/serverIcDemo.jTcl,v 1.2 1999/03/08 08:34:20 fulup Exp $
+#
+#  Copyright(c) 1997  FRIDU a Free Software Company
+#
+# File      :   icServerDemo.jTcl  Saving main server
+# Project   :   Tools
+# SubModule :   Demo
+# Author    :   Fulup Ar Foll fulup@iu-vannes.fr
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:20 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/IcEngine/server/Tcl/serverIcDemo.jTcl,v $
+#      State       : $State: Exp $
+#
+#
+# Modification History
+# --------------------
+# 01a,12nov97,fulup written
+#
+# ---
+
+# Import used class
+# ------------------------
+ package require jTcl
+ jClassImport {ic.server.*}
+
+# "Add push method to standard ic rules server"
+# ---------------------------------------------
+class DemoRuleEngine {extends IcRuleEngine} \
+{
+  # "Push method send asychonous data to GUI"
+  # -----------------------------------------
+  public push {RULE_ID} \
+  {
+    # "Load rule context"
+    upvar #0 $RULE_ID RULE
+
+    # "subcontract our owner (tcp client agent) for sending data"
+    $THIS(owner) writeAndFlush \
+      [list [list [string range $RULE(class) 3 end] #$RULE(value)]]
+  }
+
+  # "need a contructor to pass top rule name"
+  DemoRuleEngine {OWNER {RL_TOP all}}
+  {
+    $SUPER $MY $OWNER $RL_TOP
+  }
+
+} ;# "end DemoRuleEngine"
+
+# "Standard Ic server client agent don't have push facility"
+# ----------------------------------------------------------
+class DemoRpcClient {extends IcRpcClient} \
+{
+  # "We want to change engine class in order adding push method"
+  static engineClass DemoRuleEngine
+
+  # "Our constructeur just pass param to super class"
+  DemoRpcClient {RPC_ID HOST SOCK PORT}
+  {
+    $SUPER $MY $RPC_ID $HOST $SOCK $PORT
+  }
+
+} ;# end class DemoIcServerCl
+
+# We have to define a new icServer class in order orverriding
+# Server client agent class which is static
+# -----------------------------------------------------------
+class DemoRpcServer {extends IcRpcServer} \
+{
+  # "Override class variable for client agent in server"
+  static clientsClass DemoRpcClient
+
+  # "Our constructer just pass information to our super class"
+  DemoRpcServer {PORT RULE_NAME} \
+  {
+    $SUPER $MY $PORT $RULE_NAME
+  } ;# "end DemoIcServer"
+
+} ;# "end DemoIcServer"
+
+# Demo rpc start entry point
+# ---------------------------
+proc demo.ic.server.start {{PORT 1234}} \
+{
+  global env
+  global VERBOSE
+  global JTCL_FILE
+  global tk_library
+
+  set RULE_FILE [jClassName {demo.ic.rules.*}]
+  set RPC_ID [new DemoRpcServer $PORT $RULE_FILE]
+
+  # in tk we use waiting loop
+  if [info exists tk_library] {return $RPC_ID}
+
+  puts "---"
+  puts "IcServerDemo server waiting for IcClients (wish clientIcDemo.jTcl)"
+  puts "---"
+
+  # waiting for event on port $PORT
+  $RPC_ID vwait
+
+  free $RPC_ID
+} ;# end save.IcServer.start
+
+# In dev mode we start it outside of any context
+if {![info exists DEMO_IT]} {eval demo.ic.server.start $argv}
+

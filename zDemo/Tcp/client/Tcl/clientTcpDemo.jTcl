@@ -1,0 +1,98 @@
+# $Header: /Master/jTcl/zDemo/Tcp/client/Tcl/clientTcpDemo.jTcl,v 1.2 1999/03/08 08:34:20 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   clientTcpDemo.tcl   Simple client using http Network Class
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   tcl/jTcl/demo
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:20 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/Tcp/client/Tcl/clientTcpDemo.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01d,01dec97,fulup adapted to jTcl-3.X tree
+# 01c,24apr97,fulup moved to an even driven client demo
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+#
+
+# ---------------------------------------------------------------------
+#  clientDemo: Start a TCP client on a TCP socket (7 by default)
+#  it use two channel and event mode transmition
+# ---------------------------------------------------------------------
+ package require jTcl
+ jClassImport {tcp.channel*}
+
+
+# class redefine read to display all incomming character to display
+# -------------------------------------------------------------------------
+class DemoTcpClient {extends TcpChannel} \
+{
+  set twinId {}     "# twinId is the other side of this client"
+
+  # "read write date in local channel output buffer"
+  public read {}
+  {
+    # on channel send exception to main loop & free resource
+    if [eof $THIS(in)] \
+    {
+      puts "EOF/quit on ID:$MY"
+      exit
+    }
+
+    $THIS(twinId) write [gets $THIS(in)]
+  }
+
+  # "Constructor dont do any thing localy"
+  private DemoTcpClient {IN OUT}
+  {
+    # Call our super class to effectively create channel
+    $SUPER $MY $IN $OUT
+  }
+} ;# end Class DemoTcpClient
+
+#  Test channel with a small echo client
+#  Connect one on remote server & second to local stdin
+#  When any channel is readable call and echo proc
+#  that use the l.echo link to find out which channel
+#  as to be used for echo.
+ # -------------------------------------------------
+proc demo.tcp.simpleCl.start {{PORT 23} {HOST localhost}} \
+{
+  # "Create a second object for keybord and display"
+  set LOCAL_ID [new DemoTcpClient   stdin stdout]
+
+  # "Other one for remote server connection via TCP/IP"
+  if [catch {set SOCK [socket $HOST $PORT]} ERR] \
+  {
+     puts stderr "ERROR: $ERR |$HOST:$PORT|"
+     return
+  }
+
+  set REMOTE_ID [new DemoTcpClient  $SOCK $SOCK]
+
+  # "Give each object to each other for packet transfert"
+  $LOCAL_ID  set twinId $REMOTE_ID
+  $REMOTE_ID set twinId $LOCAL_ID
+
+  # Check  Object
+  $REMOTE_ID dump
+  $LOCAL_ID  dump
+
+  # enter envent loop
+  puts "Connecting onto $HOST on port:$PORT for quiting type CTRL-C"
+  vwait FOREVER
+
+  # free resource :for fun only:
+  free $LOCAL_ID
+  free $REMOTE_ID
+
+} ;# end demo.client.start
+
+if {![info exists DEMO_IT]} {eval demo.tcp.simpleCl.start [lindex $argv 0]}

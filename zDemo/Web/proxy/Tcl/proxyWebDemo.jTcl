@@ -1,0 +1,199 @@
+# $Header: /Master/jTcl/zDemo/Web/proxy/Tcl/proxyWebDemo.jTcl,v 1.2 1999/03/08 08:34:21 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   ProxyWebDemo.tcl read socket print message and send it back
+# Projet    :   jTcl-Demo
+# SubModule :   Web/proxy
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:21 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/Web/proxy/Tcl/proxyWebDemo.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01c,01dec97,fulup Adapted to new jTcl 3.X and print only Html headers
+# 01b,30may97,fulup moved in demodir
+# 01a,19mar97,fulup written
+#
+
+# ------------------------------------------------------------------------------
+# proxyFile: Take input from a client and send it back to a server,
+# all trafic is printed and can be redirected to a log file.
+# This proxy is supose to be fully transparent and can be use to spy any
+# client/server protocol.
+# Bug: As we display result onto screen, Binary file like gif image file
+#      are not transported correctely.
+# ------------------------------------------------------------------------------
+
+ package require jTcl
+ jClassImport {tcp.server.*}
+
+# "FileProxyTarget is reponsible for reading target server packet and send them to client"
+# -----------------------------------------------------------------------------------------
+class FileProxyTarget {extends TcpChannel}\
+{
+ static translation binary
+
+  public read {}
+  {
+   global JTCL_DEBUG
+
+   # Read one line from remote server
+   set LINE [gets $THIS(in)]
+
+   # If Eof subcontract server method for handling execption
+   if {[eof $THIS(in)]} \
+   {
+      # Using call in place of $MY is faster
+      free   $THIS(client)
+      free   $MY
+      return
+   }
+
+
+   if {!$THIS(quiet)}   {puts "S> $LINE"}
+
+
+   # Stop displaying data when Content Lenght is founded
+   if [string match {Content-Length*} $LINE] \
+   {
+      set THIS(quiet) 1
+   }
+
+   # Rewrite on Target server Channel socket
+   if {$LINE != ""} {$THIS(client) writeAndFlush $LINE}
+  }
+
+  # "Create on channel to read from target server and send back to client"
+  FileProxyTarget {CLIENT_ID TARGET_HOST TARGET_PORT}
+  {
+    global env
+
+    set THIS(client) $CLIENT_ID
+    set THIS(quiet)  0
+
+    if [info exists env(JTCL_DEBUG)] \
+    {
+      set THIS(debugSaved) $env(JTCL_DEBUG)
+    } else {
+      set THIS(debugSaved) ""
+    }
+    set SOCK   [socket $TARGET_HOST $TARGET_PORT]
+    $SUPER $MY $SOCK
+  }
+} ;# end FileProxyTarget
+
+# "FileProxyClient is responsible for reading client packet and send them back to target server"
+# ----------------------------------------------------------------------------------------------
+class FileProxyClient {extends TcpServerCl}\
+{
+ static translation binary
+
+  # "We use auth method to connect to our target server"
+  # ----------------------------------------------------
+  public auth {}
+  {
+    # Create a private channel to our target server fir each incomming client
+    set TARGET_HOST [$THIS(server) get targetHost]
+    set TARGET_PORT [$THIS(server) get targetPort]
+    set THIS(target) [new FileProxyTarget $MY $TARGET_HOST $TARGET_PORT]
+    fconfigure $THIS(in) -translation binary -blocking 1
+    return OK
+  }
+
+  # "This routine echo characteris on server channel"
+  # -------------------------------------------------
+  public read {} \
+  {
+   # Read one line from remote server
+   set LINE [gets $THIS(in)]
+
+   # If Eof subcontract server method for handling execption
+   if {[eof $THIS(in)]} \
+   {
+      # Using call in place of $MY is faster
+      free   $THIS(target)
+      free   $MY
+      puts   "proxyClient eof exit"
+      return
+   }
+
+   puts "c> $LINE"
+
+   # Rewrite on Target server Channel socket
+   $THIS(target) writeAndFlush $LINE
+
+  } ;# "end read"
+
+  FileProxyClient {SERVER_ID HOST SOCK PORT} \
+  {
+    # "Client constructor also need this parameters"
+    $SUPER $MY $SERVER_ID $HOST $SOCK $PORT
+  }
+
+} ;# "end class FileProxyClient"
+
+# "Define out server echo class"
+# ------------------------------
+class DemoWebProxy {extends TcpServer} \
+{
+ # "override server client class"
+ static secure      1 ;# "client use auth proc"
+ static clientsClass FileProxyClient
+
+ DemoWebProxy {PORT_IN HOST_OUT PORT_OUT}
+ {
+   set THIS(targetHost) $HOST_OUT
+   set THIS(targetPort) $PORT_OUT
+   $SUPER $MY $PORT_IN
+
+ }
+} ;# "end DemoWebProxy"
+
+# "server example"
+# ----------------
+proc file.proxy.start {PORT_IN HOST_OUT PORT_OUT} \
+{
+  global SV_VWAIT
+  global JTCL_DEBUG
+
+  # Proxy process DEBUG in a specific way and we need global JTCL_DEBUG
+  if {![info exist JTCL_DEBUG]} {set JTCL_DEBUG ""}
+
+  if [catch {socket $HOST_OUT $PORT_OUT}] \
+  {
+     puts "ERROR can't connect onto host=$HOST_OUT port=$PORT_OUT"
+     return
+  }
+
+  # create a new server and set some minimum methode
+  set SERVER_ID [new DemoWebProxy $PORT_IN $HOST_OUT $PORT_OUT]
+
+  # proxy is can't used trace mode
+  if {$JTCL_DEBUG == "*"} {
+    puts "WARNING: proxy cannot used * as DEBUG regexp (JTCL_DEBUG ignored)"
+    set JTCL_DEBUG ""
+  }
+  # loop forever on event dispaching
+  puts "Echo server waiting for connection \[use telnet localhost $PORT_IN\] to test it"
+  $SERVER_ID vwait
+
+  free $SERVER_ID
+
+} ;# end file.proxy.start
+
+
+# Auto start mode
+# ---------------
+if {[llength $argv] != 3}\
+{
+  puts "ERROR: synxtaxe tclsh proxyDemo.tcl port-In serverName serverPort"
+} else {
+  file.proxy.start [lindex $argv 0] [lindex $argv 1] [lindex $argv 2]
+}
+

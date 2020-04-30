@@ -1,0 +1,106 @@
+# $Header: /Master/jTcl/zDemo/Web/httpd/Tcl/tcl2htmlWebDemo.jTcl,v 1.2 1999/03/08 08:34:21 fulup Exp $
+#
+#  Copyright(c) jhobbs@cs.uoregon.edu
+#
+# File      :   tcl2htmlWebDemo.jTcl translate jTcl in html
+# Projet    :   Rubicon
+# SubModule :   Web/Server demo
+# Auteur    :   jhobbs@cs.uoregon.edu
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:21 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/Web/httpd/Tcl/tcl2htmlWebDemo.jTcl,v $
+#      State       : $State: Exp $
+#
+# ------------------------------------------------------------
+# Converts tcl code to HTML
+# Original version was retreive from
+# Further questions contact: jhobbs@cs.uoregon.edu
+# http://www.cs.uoregon.edu/~jhobbs/
+# -------------------------------------------------------------
+#
+# Modification history
+# --------------------
+# 01a,19mar98,fulup moved to a jTcl class and added some jTcl keywords
+
+jClassImport {lang.object.*}
+
+array set H {
+  comment 	 {<EM><FONT color=#CC00FF>}
+  /comment	 </FONT></EM>
+  proc           {<FONT color=#0000FF>}
+  /proc		 </FONT>
+  public	 {<FONT color=#0000FF>}
+  /public	 </FONT>
+  private	 {<FONT color=#00FFFF>}
+  /private	 </FONT>
+  class 	 {<FONT color=#FF0000>}
+  /class	 </FONT>
+   THIS          {<FONT color=#CCFF00>$}
+  /THIS          </FONT>
+  MY             {<FONT color=#CCFF00>$}
+  /MY            </FONT>
+  CLASS          {<FONT color=#CCFF00>$}
+  /CLASS         </FONT>
+  str		 {<FONT color=#FFFF00>}
+  /str		 </FONT>
+}
+
+# Build tcl2html as a jTcl class
+# -------------------------------
+class Tcl2Html {extends Object} {
+
+ # "Takes in tcl script as data Returns data in HTML form"
+ # -------------------------------------------------------
+ public tcl2html { title {header {}} } {
+  global H CMD
+  global PAGE
+  set inComment 0; set inString 0; set inExec 0;
+
+  regsub -all {&} $THIS(data) {\&amp;} THIS(data)
+  regsub -all {<} $THIS(data) {\&lt;} THIS(data)
+  regsub -all {>} $THIS(data) {\&gt;} THIS(data)
+
+  lappend PAGE "<HTML><HEAD><TITLE>$title</TITLE></HEAD>" "<BODY>"  "<H1>$title</H1>" "<HR>" $header "<PRE>";
+
+  set strings [split $THIS(data) \n]
+
+  set cmnt "^\[\t \]*\#"
+  foreach line $strings {
+    if {![string length [string trim $line]]} {
+      lappend PAGE {}
+    } elseif {[regexp $cmnt $line]} {
+      if !$inComment {
+	lappend PAGE $H(comment)
+	set inComment 1
+      }
+
+      lappend PAGE $line
+    } else {
+      if $inComment {
+	lappend PAGE $H(/comment)
+	set inComment 0
+      }
+
+      lappend PAGE [Tcl2Html.procit $MY $line]
+    }
+  }
+  if $inComment { lappend PAGE $H(/comment) }
+
+  lappend PAGE </PRE> </BODY> </HTML>
+
+ } ;# "end tcl2html"
+
+ private procit {line} {
+  global H
+  foreach word [split $line] {
+    regexp {\$([A-Z]+)} $word x word
+    if {[info exists H($word)]} {
+      regsub $word $line $H($word)&$H(/$word) line
+    }
+  }
+  return $line
+ } ;# "end procit"
+} ;# end class Tcl2html

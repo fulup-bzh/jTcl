@@ -1,0 +1,48 @@
+<comment>
+; $Header: /Master/jTcl/zDemo/Rpc/server/Html/getAdr.html,v 1.2 1999/03/08 08:34:20 fulup Exp $
+;
+;  Copyright(c) 1996-97 FRIDU a Free Software Company
+;
+; File      :   Index.html Index page for jTcl
+; Projet    :   Fridu a Realtime Booster
+; SubModule :   jTcl Java-like TCL and Fridu TCL extention
+; Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+;
+; Last
+;      Author      : $Author: fulup $
+;      Date        : $Date: 1999/03/08 08:34:20 $
+;      Revision    : $Revision: 1.2 $
+;      Source      : $Source: /Master/jTcl/zDemo/Rpc/server/Html/getAdr.html,v $
+;      State       : $State: Exp $
+;
+; Modification History
+; --------------------
+; 01a,29mar97,fulup Written
+;
+;
+</comment>
+
+<html>
+<FRAME TARGET = "frame.input">
+<head>
+<title>
+Examplefor new extended httpd class
+</title>
+</head>
+<body bgcolor="#ffffff">
+
+<p>  <center>
+    <b><font size=6>Enter your TCl cmd </b>
+  </center><p>
+<br>
+
+<br>
+<form action="adrGetHtml.rpc" target=frame.message method=POST>
+Searched Name <input type=text size=40 name=NAME>
+
+<input type=submit value="Send">
+<input type=reset  value="Clear">
+</form>
+</body>
+</html>
+

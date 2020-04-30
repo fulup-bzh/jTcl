@@ -1,0 +1,26 @@
+Proxy: Minimum HTTP protocol ananalyser
+---------------------------------------
+
+Proxy read all request from a Browser, transfert them to your WEB server
+and retreive response from your httpd server to retransfer them to your
+browser again.
+
+Proxy will print all HTTP header informations, it does not print data
+from "Content-Lenght" field in order not scrambling your screen with
+binary data as those provided with images.
+
+Proxy, use a gets and puts function that does not handle correctely 
+binary informations, this make GIF images not to be display when passed
+thru this mini proxy.
+
+How to start:
+
+ jTcl proxyWebDemo.jTcl VirtualWebPort EffectiveWebServerHost EffectiveWebPort
+
+ example: Following command start a proxy that will monitor all request
+          from a web server running on port 1234 on localcal onto port:1235
+          Thus changing your request on your browser from localhost:1234
+          to localhost:1235 will allows you to check on your HTTP header.
+          command: jTcl proxyWebDemo.jTcl 1235 localhost 1234
+      
+ 

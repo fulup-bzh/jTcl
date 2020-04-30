@@ -1,0 +1,230 @@
+#  $Header: /Master/jTcl/jTcl/ic/Tcl/errorIc.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $
+#
+#       Copyright(c) 96-97 Fridu a Free Software Company
+#	Copyright(c) 95-96 gant Skol Veur Breizh Kreizteiz (IUP) Gwened
+#                      University of South Britany
+#
+# File      :   errorIc.tcl set err handling procedure
+# Projet    : 	Fridu a Realtime Booster
+# SubModule :   icRule binding
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/ic/Tcl/errorIc.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01e,14jan98,fulup minor changes for jTcl 3.XX
+# 01d,11nov97,fulup adapted to new dispatching strategy
+# 01c,07jun97,fulup change error focus strategie
+# 01b,28feb97,fulup released jTcl
+# 01a,fulup,24feb96 writen
+#
+
+jClassImport {ic.popup.*}
+
+class IcError {extends Object} \
+{
+ set color-Message {black Bisque1}
+ set color-Empty   {grey  grey}
+ set color-Error   {red   Bisque1}
+ set count        0
+ set num          1
+
+  # "Clean up Error area"
+  # ---------------------
+  public clean {}
+  {
+    set THIS(count) 0
+    set THIS(num)   0
+    $CLASS(display) $MY Message {}
+    $THIS(wnum) delete 0 end
+
+    foreach SLOT [array names THIS _err*] \
+    {
+       unset THIS($SLOT)
+    }
+  } ;# "end clean"
+
+  # "delete delete a rule err in err list"
+  # --------------------------------------
+  public del {ID}
+  {
+   if {[info exists THIS(_err$ID)]} \
+   {
+     incr  THIS(count) -1
+     unset THIS(_err$ID)
+     if {$THIS(count) == 0} {$CLASS(clean) $MY}
+   }
+  } ;# "end delete"
+
+
+  # "add insert a rule and attatched message in error list"
+  # -------------------------------------------------------
+  public add {ID}
+  {
+   if {![info exists THIS(_err$ID)]} \
+   {
+     # "We use hashtable to store FX widget ID"
+     incr  THIS(count) +1
+     set THIS(_err$ID) $ID
+   }
+   set THIS(last) $ID
+  } ;# "end add"
+
+  # "force a tempry help message in error field"
+  # --------------------------------------------
+  public tip {JTK_ID}
+  {
+    upvar #0 $JTK_ID JTK
+
+    # Set error widget in tipmode
+    set THIS(tiped) 1
+
+    # Effectively display message
+    $CLASS(display) $MY Message $JTK(tip)
+
+    # Bind JTK widget leave as un tip widget (done out of current context)
+    bind $JTK(widget) <Leave> \
+     "
+       $MY set tiped  0
+       $CLASS(current) $MY
+     "
+  }
+
+  # "handle globalText errro message"
+  # ---------------------------------
+  public display {COLOR MSG}
+  {
+    # allows modification on globalText
+    $THIS(widget) config -state normal ;# set entry editable
+
+    # display err message in red
+    $THIS(widget) configure -fg [lindex $THIS(color-$COLOR) 0]
+    $THIS(widget) configure -bg [lindex $THIS(color-$COLOR) 1]
+
+    # clean the place
+    $THIS(widget) delete 0 end
+
+    if {$MSG == {}} {return}
+
+    # Insert error message
+    $THIS(widget) insert 0 $MSG
+
+    # set globalText in read-only mode
+    $THIS(widget) config -state disabled ;# set entry read-only
+
+  } ;# "end display"
+
+  # "increment displayed errNumber and associate err msg WARNING: start at 1"
+  # -------------------------------------------------------------------------
+  public current {{THIS_INCR 999}}
+  {
+    # if no err or in tipped mode return
+    if {$THIS(tiped) || ($THIS(count) == 0)} {return}
+
+    # clean up old error number
+    $THIS(wnum) delete 0 end
+
+    # compute new err NUMBER
+    incr THIS(num)   $THIS_INCR
+    if {$THIS(num) > $THIS(count)}  {set THIS(num) 1}
+    if {$THIS(num) <= 0 }           {set THIS(num) $THIS(count)}
+
+    # find out which RULE is attached to wanted index
+    if {($THIS_INCR == "+1") || ($THIS_INCR == "-1")} \
+    {
+      # Take num minus one because first element of list is zero
+      set JTK_ID [lindex [lsort [array names THIS _err*]] [expr $THIS(num) -1]]
+      set THIS(last) $THIS($JTK_ID)
+
+      # upate error number
+      $THIS(wnum) insert end $THIS(num)
+
+      # Force focus on widget
+      $THIS(owner) focus $THIS(last)
+
+    } else {
+      # upate error number with error count and don't focus
+      $THIS(wnum) insert end $THIS(count)
+    }
+
+    # display last error or selcted error message
+    $CLASS(display) $MY Error [$THIS(last) get error]
+
+  } ;# "end num"
+
+  # "Create a popup with current error"
+  # -----------------------------------
+  public popup {}
+  {
+    set ERR_LIST {}
+    foreach JTK_ID [array names THIS _err*] \
+    {
+      upvar #0 $THIS($JTK_ID) JTK
+      lappend ERR_LIST $JTK(error)
+    }
+    # effectively create Popup popup auto destroy we don't track it handle
+    new IcPopup $MY $ERR_LIST
+
+  } ;# "end popup"
+
+  # "Call back receive selected error message from popup"
+  # -----------------------------------------------------
+  public select {ERR}
+  {
+    # Pass back message to display proc
+    $CLASS(display) $MY Error $ERR
+
+  } ;# "end select"
+
+  # "Error object constructor create error widget"
+  # ----------------------------------------------
+  IcError {OWNER_ID}
+  {
+    set THIS(owner) $OWNER_ID
+
+    set THIS(tiped) 0
+
+    # Get binder root frame
+    set THIS(root) [$OWNER_ID get root]
+
+    set g $THIS(root).errFrame
+    frame $g -borderwidth 2 -relief sunken
+    frame $g.f
+
+    # create global label
+    entry $g.e  -relief sunken -xscrollcommand "$g.f.s set"
+    set THIS(widget) $g.e
+
+    # change bintags for excluding THIS(widget) from Entry class
+    bindtags $THIS(widget) "all . global $THIS(widget)"
+
+    # create global scroll bar
+    scrollbar $g.f.s -relief sunken -width 10 -orient horiz -command "$g.e xview"
+    pack  $g.f.s -side left -fill x -expand true
+
+    # create navigation button
+    button $g.f.minus -text "<" -relief flat -command "$CLASS(current) $MY -1"
+
+    # create a local entry and remove entry call for binding
+    set THIS(wnum) [entry  $g.f.num   -width 3]
+    button $g.f.plus  -text ">" -relief flat -command "$CLASS(current) $MY +1"
+
+    # bind return to force and err number
+    bind $g.f.num <Return> {$CLASS(current) [$g.f.num get]}
+
+    # try to pack nicely
+    pack $g.f.plus $g.f.num $g.f.minus -side right -expand false
+
+    # pack all global text widget
+    pack  $g.e $g.f -side top -fill x -expand true -anchor se
+
+    bind $THIS(widget) <Button-1> "$CLASS(popup) $MY"
+    pack $THIS(root).errFrame  -side bottom -fill x
+  } ;# "end Error constructor"
+} ;# "end class IcError"

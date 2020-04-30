@@ -1,0 +1,292 @@
+#  $Header: /Master/jTcl/jTcl/ic/Tcl/jTkIc.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $
+#
+#	Copyright(c) 96-97 Fridu a Free Software Company
+#
+# File      :   jTkIc.tcl New Meta widget for Tk design
+# Projet    : 	Fridu a Free Software Company
+# SubModule :   graphic widget
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/ic/Tcl/jTkIc.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01c,04mar98,crepet jTkIcContainer provides a frame to pack jTkIcWidget
+# 01b,14jqn98,fulup make container as an extention of Object
+# 01a,11nov97,fulup written
+#
+
+# "import binder and dispatcher class"
+jClassImport {ic.binder.*}
+jClassImport {ic.client.*}
+
+set OPT_DIR [jClassName ic.options.*]
+
+if {[file exists $OPT_DIR/optionsIc.def]} \
+  {
+     option readfile  $OPT_DIR/optionsIc.def
+     set IC_BITMAPDIR $OPT_DIR
+  }
+
+# "Define method for container"
+# -----------------------------
+class jTkIcContainer {extends Object} \
+{
+  static packOpt {-expand y -fill x -side top}  # "define default layout in container"
+  static frameOpt {}          # "define a default for frame border"
+
+  # "display wanted frame before focusing a specific widget"
+  # --------------------------------------------------------
+  public focus {JTK_ID}
+  {
+    # check JTK widget exists before trying
+    upvar #0  $JTK_ID JTCK
+    if {![info exists JTCK(class)]} {return}
+
+    # first get current frame display in $ROOT
+    #set CURRENT [pack slaves $THIS(root)]
+    #if {[string match "$THIS(current)*" $JTCK(widget)] == 0}\
+    #{
+    #  # string does not match change widget
+    #  pack forget $CURRENT
+    #  regexp "$THIS(root)\.\[0-z\]*" $W NEW_WD
+    #  pack $NEW_WD -fill both -expand true
+    #}
+
+    $JTK_ID focus
+  }
+
+  # "Pack all contains frame"
+  # --------------------------
+  public pack {args} \
+  {
+    # "loop on widget list in order packing them"
+    foreach WIDGET $args \
+    {
+      eval pack [$WIDGET get frame] $CLASS(packOpt)
+    }
+  } ;# "end pack"
+
+  # "User don't see rule server object interface"
+  # ---------------------------------------------
+  public send {args}
+  {
+    eval $THIS(icSvId) send $args
+  }
+
+  # "build overall frame and connect to icClient"
+  # ---------------------------------------------
+  jTkIcContainer {ROOT HOST PORT}
+  {
+    # "root frame will be used later on"
+    set THIS(root)  $ROOT
+
+    # "create a private frame for our contener"
+    set THIS(frame) [eval frame $ROOT.$MY $CLASS(frameOpt)]
+    pack $THIS(frame)
+
+    # "All interface have 2 agregated object (Error + Client)"
+    set THIS(errorId)  [new IcError   $MY]
+    set THIS(icSvId)   [new IcClient  $THIS(errorId) $HOST $PORT]
+  } ;# "end constructor"
+} ;# "end jTkIcContainer"
+
+# Super jTkIcWidget class handle binder/dispatcher relation
+# -------------------------------------------------------
+class jTkIcWidget {extends IcBinder} \
+{
+  static frameOpt {}  # "define global frame option"
+
+  # "define painting mode"
+  static color-LCK  grey
+  static color-FX   red
+  static color-OK   blue
+  static color-UNK  black
+
+  # "paint method display an acceptable color"
+  # ------------------------------------------
+  public paint {COLOR}
+  {
+    if [info exists CLASS(color-$COLOR)] \
+    {
+       $THIS(widget) configure -fg $CLASS(color-$COLOR)
+    } else {
+       $THIS(widget) configure -fg $CLASS(color-UNK)
+    }
+  }
+
+  # "Focus push mouse in widget"
+  # ----------------------------
+  public focus {}
+  {
+    focus $THIS(widget)
+  }
+
+  # "Just pas date to out super class"
+  # ----------------------------------
+  public queryValid {}
+  {
+    $SUPER $MY
+  }
+
+  # "Just pass hand to our super class"
+  # -----------------------------------
+  public select {DATA}
+  {
+   $SUPER $MY $DATA
+  }
+
+  # "create a frame and save usefull owner pointers"
+  # ------------------------------------------------
+  jTkIcWidget {OWNER_ID} \
+  {
+    upvar  #0 $OWNER_ID OWNER
+
+    set THIS(ownerId) $OWNER_ID
+    set THIS(frame)   [eval frame [$OWNER_ID get frame].$MY $CLASS(frameOpt)]
+    set THIS(status)  UNK
+
+    # "We need icServer and error for binding/dispatching operations"
+    set THIS(icSvId)      $OWNER(icSvId)
+    set THIS(errorId)     $OWNER(errorId)
+
+    # Update jTk widget chain list
+    if [info exists OWNER(wdList)] \
+    {
+      # set our previous widget ID and update previous next ID
+      set THIS(wdPrevious) [lindex $OWNER(wdList) end]
+      $THIS(wdPrevious) set wdNext     $MY
+      $OWNER(wdFirst)   set wdPrevious  $MY
+    } else {
+      # We are facing first widget
+      set OWNER(wdFirst) $MY
+      set THIS(wdPrevious) $MY
+    }
+
+    # At creation we are the last widget
+    set THIS(wdNext) $OWNER(wdFirst)
+
+    # "Append our widget in container list for tab action"
+    lappend OWNER(wdList) $MY
+
+  }
+} ;# end jTkIcWidget
+
+# "Create an entry field with an attached label"
+# ----------------------------------------------
+class jTkIcEntry {extends jTkIcWidget} \
+{
+ static entryOpt  {}   # "entry filed option"
+ static labelOpt  {-anchor w -width 35}  # "text default option"
+ static packOpt   {-side left -expand y -fill x -pady 2m} # "packer default opt"
+
+ # "entry field only send validation if a key as been typed in"
+ # ------------------------------------------------------------
+ public queryValid {}
+ {
+    if {!$THIS(changed)} {return}
+    $SUPER $MY
+    set THIS(changed) 0
+ }
+
+ # "Select as be be overwrited in order bypassing cache"
+ # -----------------------------------------------------
+ public select {DATA}
+ {
+    set THIS(changed) 1
+    $SUPER $MY $DATA
+ }
+
+ # "entry field as an attached label"
+ # ----------------------------------
+ public LBL {DATA}
+ {
+   $THIS(label) configure -text $DATA
+ }
+
+ # "delete old value and write new one"
+ # ------------------------------------
+ public VAL {DATA}
+ {
+   $THIS(widget) delete 0 end
+   $THIS(widget) insert 0 $DATA
+ }
+
+ # "Create all entry on the same line"
+ # -----------------------------------
+ jTkIcEntry {OWNER_ID RULE} \
+ {
+  $SUPER $MY $OWNER_ID
+
+  # Don't send to validation until user type in something
+  set THIS(changed)    0
+
+  # "draw a libel and and entry in a frame"
+  eval label $THIS(frame).l -text $RULE $CLASS(labelOpt)
+  eval entry $THIS(frame).e $CLASS(entryOpt)
+  eval pack  $THIS(frame).l $THIS(frame).e $CLASS(packOpt)
+
+  # "bind entry field in icClient object"
+  set THIS(widget) $THIS(frame).e
+  set THIS(label)  $THIS(frame).l
+  set THIS(rule)   $RULE
+  $CLASS(bind) $MY
+
+ } ;# "end constructor"
+} ;# "end jTkIcEntry"
+
+# "Create buttons in a subframe"
+# -------------------------------
+class jTkIcButton {extends jTkIcWidget} \
+{
+ static packOpt   {-side right -pady 2m} # "packer default opt"
+
+  # "Help display a message in global area"
+  # ----------------------------------------
+  public TIP {MSG}
+  {
+    set THIS(tip)   $MSG
+    $CLASS(message) $MY
+  }
+
+  # "New value don't change button"
+  # -------------------------------
+  public VAL {MSG} {}
+
+  # "Button don't auto valid on focus IN/OUT"
+  # -----------------------------------------
+  public focusIn {} {}
+
+  # "Create all button on the same line"
+  # -----------------------------------
+  jTkIcButton {OWNER_ID RULE} \
+  {
+   # our super class create a global frame
+   $SUPER $MY $OWNER_ID
+
+   # "draw a button"
+   set BUTTON [button $THIS(frame).b]
+   if {![catch {open $IC_BITMAPDIR/$NAME.xbm} FD]} \
+   {
+     close $FD
+     $BUTTON configure -bitmap @$IC_BITMAPDIR/$RULE.xbm
+   } else {
+     $BUTTON configure -text "$RULE"
+   }
+
+   # "bind button thru our super class and cancel list binding"
+   set THIS(widget)  $BUTTON
+   set THIS(rule)    $RULE
+   $CLASS(bind) $MY
+   pack   $BUTTON
+   bind   $BUTTON <Button-1>   "$CLASS(queryValid) $MY"
+
+  } ;# "end constructor"
+} ;# "end jTkIcButton"
+
+

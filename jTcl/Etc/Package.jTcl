@@ -1,0 +1,108 @@
+#  Copyright(c) 1996-98 FRIDU a Free Software Company [fridu@fridu.bzh]
+#
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   jTcl Tcl package handler
+# Auteur    :   Fulup Ar Foll [fulup@fridu.bzh]
+#
+# Last
+#      Author      : $Author. fulup $
+#      Date        : $Date. 1997/02/01 17.29.30 $
+#      Revision    : $Revision. 1.2 $
+#      Source      : $Source. /Master/config/header/header.sh,v $
+#
+# Modification History
+# --------------------
+# 01e,07jul98,fulup adapted to new jOS tree and module versioning
+# 01d,14jan98,fulup addated ctDll and adapted to production tree
+# 01c,22noc97,fulup adapted to jTcl 3.x
+# 01g,11nov97,fulup added jIc file
+# 01f,22oct97,fulup added presistant module
+# 01e,19oct97,fulup added auto path for pMaster tree
+# 01d,20sep97,fulup move all procedure to jTcl/lang/Tcl/jClassLang.jTcl
+# 01c,23may97,fulup adapted to tclet
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+#
+
+# dont include this file more than one
+# ------------------------------------
+if {![info exist JTCL_LOADED(rubicon.jTcl)]} \
+{
+  set JTCL_LOADED(rubicon.jTcl) TRUE
+
+  # Set jTcl symbolic version
+  # -------------------------
+  set _JTCL_REL 3.04
+  package provide jTcl $_JTCL_REL
+
+  # Set directory depending on devlopement status
+  # ---------------------------------------------
+  switch -- $PKG_STATE\
+  {
+   dev {
+    # If not def ARCH_OS use default
+    if {![info exist env(ARCH_OS)]} {set env(ARCH_OS) Unknow}
+
+    # Use development version
+    set _JTCL_CORE   $PKG_DIR/lang/Tcl
+    set _JTCL_TCP    $PKG_DIR/tcp/Tcl
+    set _JTCL_OPT    $PKG_DIR/ic/Etc
+    set _JTCL_IC     $PKG_DIR/ic/Tcl
+    set _JTCL_DLL    $env(TOP)/Fridu/Exe/$env(ARCH_OS)/lib
+   }
+   prod {
+    # Use production version
+    set _JTCL_CORE   $PKG_DIR/Tcl
+    set _JTCL_TCP    $PKG_DIR/Tcl
+    set _JTCL_IC     $PKG_DIR/Tcl
+    set _JTCL_OPT    $PKG_DIR/Etc
+    set _JTCL_GO     $PKG_DIR/Tcl
+    set _JTCL_DLL    $PKG_DIR/../../lib
+   }
+   default {
+    puts "Unknow mode $PKG_STATE"
+    return ERROR
+   }
+  } ;# end switch
+
+  # jTcl package as to load by hand jClassLang
+  # in order initiating class loading facilities
+  if {[info proc jClassRegister] == {}} \
+  {
+    uplevel #0 source $_JTCL_CORE/jClassLang.jTcl
+    set     JTCL_IMPORTED(lang.include.$_JTCL_REL) 0
+  }
+
+  jClassRegister jTcl.state    $_JTCL_REL "$PKG_STATE _JTCL_REL"
+  jClassRegister jTcl.pkg.dir  $_JTCL_REL $PKG_DIR
+  jClassRegister jTcl.cTcl.dll $_JTCL_REL "$_JTCL_DLL/libCt.so Ct"
+  jClassRegister lang.debug    $_JTCL_REL $_JTCL_CORE/debugLang.jTcl
+  jClassRegister lang.serial   $_JTCL_REL $_JTCL_CORE/serialLang.jTcl
+  jClassRegister lang.doit     $_JTCL_REL $_JTCL_CORE/doitLang.jTcl
+  jClassRegister lang.object   $_JTCL_REL $_JTCL_CORE/objectLang.jTcl
+  jClassRegister lang.search   $_JTCL_REL $_JTCL_CORE/searchPkgLang.jTcl
+
+  jClassRegister tcp.channel   $_JTCL_REL $_JTCL_TCP/channelTcp.jTcl
+  jClassRegister tcp.server    $_JTCL_REL $_JTCL_TCP/serverTcp.jTcl
+  jClassRegister tcp.rpc       $_JTCL_REL $_JTCL_TCP/rpcTcp.jTcl
+  jClassRegister tcp.httpd     $_JTCL_REL $_JTCL_TCP/httpdTcp.jTcl
+
+  jClassRegister ic.binder     $_JTCL_REL $_JTCL_IC/binderIc.jTcl
+  jClassRegister ic.jTk        $_JTCL_REL $_JTCL_IC/jTkIc.jTcl
+  jClassRegister ic.error      $_JTCL_REL $_JTCL_IC/errorIc.jTcl
+  jClassRegister ic.popup      $_JTCL_REL $_JTCL_IC/popupIc.jTcl
+  jClassRegister ic.client     $_JTCL_REL $_JTCL_IC/clientIc.jTcl
+  jClassRegister ic.dispatch   $_JTCL_REL $_JTCL_IC/dispatchIc.jTcl
+  jClassRegister ic.help       $_JTCL_REL $_JTCL_IC/helpIc.jTcl
+  jClassRegister ic.server     $_JTCL_REL $_JTCL_IC/serverIc.jTcl
+  jClassRegister ic.rule       $_JTCL_REL $_JTCL_IC/ruleIc.jTcl
+  jClassRegister ic.httpd      $_JTCL_REL $_JTCL_IC/httpdIc.jTcl
+  jClassRegister ic.options    $_JTCL_REL $_JTCL_OPT
+
+  # CLEAN up tempry VAR (we run at a global level)
+  foreach VAR [info var _JTCL_*] \
+  {
+     unset $VAR
+  }
+
+} ;# end if JTCL.PACKAGE.LOADED

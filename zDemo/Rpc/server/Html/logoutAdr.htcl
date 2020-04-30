@@ -1,0 +1,58 @@
+<comment>
+; $Header: /Master/jTcl/zDemo/Rpc/server/Html/logoutAdr.htcl,v 1.2 1999/03/08 08:34:20 fulup Exp $
+;
+;  Copyright(c) 1996-97 FRIDU a Free Software Company
+;
+; File      :   logout.html login foram for httpd/rpc login
+; Projet    :   Fridu a Realtime Booster
+; SubModule :   jTcl Java-like TCL and Fridu TCL extention
+; Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+;
+; Last
+;      Author      : $Author: fulup $
+;      Date        : $Date: 1999/03/08 08:34:20 $
+;      Revision    : $Revision: 1.2 $
+;      Source      : $Source: /Master/jTcl/zDemo/Rpc/server/Html/logoutAdr.htcl,v $
+;      State       : $State: Exp $
+;
+; Modification History
+; --------------------
+; 01a,24mar97,fulup Written
+;
+;
+</comment>
+
+<html>
+<head>
+<title>
+Logout
+</title>
+</head>
+<body bgcolor="#ffffff">
+
+<p>  <center>
+    <b><font size=6>LOGOUT page </font></b>
+  </center><p>
+<br>
+
+<p> Validating this will logout you from jTcl httpd server. This will
+first call user application logout.rpc method and then cleanup private
+slave interpretor attached to this connection.
+<p><center><em> Your slave Interp name is:
+<tcl=set INTERP>
+</center><br></em>
+
+<p> Your adress objects will be serialized in
+ They will be restored on next login.
+<p><center><em> Your serialization file is:
+<tcl=$HTML_ADR_ID get fileName>
+</center><br></em>
+
+<br>
+<form action="adr.logout" method=POST>
+
+<input type=submit value="Logout">
+</form>
+</body>
+</html>
+

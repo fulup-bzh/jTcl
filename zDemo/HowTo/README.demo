@@ -1,0 +1,114 @@
+This tree contains all jTcl demos
+---------------------------------
+
+How to start
+------------
+
+Automatic mode
+==============
+   just start demoIt.tcl with wish or tclsh in this case
+   demoIt.tcl compute JTCL_HOME from file absolute path location.
+
+   DemoIt can start many server demo either in text or graphic mode
+    "tclsh demo.tcl" or "wish demoIt.tcl"
+
+   Under W95 select Demo/bin/demoIt.tcl and move it on wish icon.
+
+   Warning: If you change place to demoIt.tcl in JTCL production tree
+            you will be forced to set JTCL_HOME explicitly.
+
+   NOTE: jTcl Demo should run from binary tree just out of the box,
+         with no compilation and no configuration. In case of trouble
+	 on some architecture please send me a mail.
+
+
+NETSCAPE Warning:
+=================
+
+   When making test Netscape cache can make you think server is not
+   working. This is especially true when you change server and keep
+   the same "wellknown" socket port. In this case press SHIFT key and
+   click on reload this will force Netscape to effectively reload
+   page from server.
+
+Manual mode
+===========
+ This will impose you a minimum of jTcl configuration, first you should understand
+ how jTcl find it classes libraries. This search is done in 3 step:
+
+ 1) Each jTcl file start with "package require jTcl" wich make tclsh or wish look for
+    jTcl pgkIndex.tcl in package path library. This path is defined with:
+
+    - TCLLIBPATH Shell variable ex: export TCLLIBPATH="/pMaster/Jos-3.01/bin /otherPackage"
+      NOTE:
+       + Tcl path use SPACE as separator and not ';' or ':' as Unix/NT.
+       + tclshrc file is only read for interactive session.
+
+ 2) pgkIndex.tcl file that should be in Jos "bin" directory, will
+    compute JTCL_HOME variable, this variable will point to directory where
+    Jos is located. pgkIndex.tcl will load searchPkgLang.jTcl.
+    NOTE: JTCL_HOME point to where Jos is and NOT to Jos directory.
+
+ 3) searchPkgLang.jTcl will compute JTCL_PATH directory and load all Package.jTcl
+    files, in order to build jTcl registry. This last operation is pretty complex
+    and allows jTcl to be located in Production tree, development tree or even
+    on a WEB http server.
+    Note: JTCL_HOME is used to compute JTCL_PATH, when your system is stable it is more
+      performance to set directly JTCL_PATH to the effective value. This value is printer
+      as a WARNING when computed from JTCL_HOME, just copy-paste printed value in your startup
+      file.
+
+ You can then start all demo like this:
+  tclsh Web/httpd/Tcl/httpdWebDemo.jTcl
+
+
+ HOW to debug ?
+
+   - set JTCL_DEBUG either in your shell or in your tclshrc
+       export JTCL_DEBUG='*' or set env(JTCL_DEBUG) "*"
+
+   - try by hand in an interactive tclsh "package require jTcl" if it fail your
+     TCLLIBPATH is not pointing to directory where jTcl pgkIndex.tcl is installed
+
+   - when package requiere workded try in the same interactive tclsh
+     to load Object class "jClassImport {lang.object.*}" if env(JTCL_DEBUG) is set
+     you should see jTcl trying to open jTcl packages files. When jClassImport {lang.object.*}
+     succede your should be able to try "set ID [new Object]; $ID dump"
+
+
+Demo files
+-----------
+ Tcp:
+  Contains some basic TCP client based on jTcl TCP/IP classes
+  - clientDemo.jTcl: A small telnet like client.
+  - serverDemo.jTcl: A very basic echo server.
+  - fileSvDemo.jTcl: A small file server.
+
+ Web:
+  Contains all 1th generation WEB server based on jTcl classes
+  - httpdDemo.jTcl a simple instanciation of TclHttpd class
+  - proxyDemo.jTcl a small proxy that trap all WEB request
+    on a server [very usefull for debug perpose].
+
+ Rpc:
+   Contains a small second generation server that handle
+   an address book. This demo is base on TcpHttpdRpc jTcl class.
+
+ Ic:
+   Contains ain application based on Ic rule contrains engine.
+   This demo is compose of both a server and a client side.
+
+   - server can be start either as a standalone rule engine
+     or as a 3th generation WEB server. In this case rule engine
+     is attached a slave TCL interpreter an client is executed as an
+     applet.
+   - client can be either a Java or a TK client, in both case client use
+     Ic binding/dispatching mechanism.
+
+BUG:
+----
+  - Under windows TK/wish look not working when some other product like jBuilder are running
+  - jTcl should not be placed in a directory with in space like "Program File"
+
+
+fulup@fridu.bzh

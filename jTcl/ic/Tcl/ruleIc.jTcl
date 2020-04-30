@@ -1,0 +1,454 @@
+#  $Header: /Master/jTcl/jTcl/ic/Tcl/ruleIc.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $
+#
+#         Copyright(c) 96-97 Fridu a Free Software Company
+#         Copyright(c) 95-96 gant Skol Veur Breizh Kreizteiz (IUP) Gwened
+#                      University of South Britany
+#
+# File      :   ruleIcTcl main rule engine
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   Ic rules server
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/ic/Tcl/ruleIc.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01c,11nov97,fulup adapted to new binding/dispatching strategy
+# 01b,29sep97,fulup added object owner in rule engine and doIt method
+# 01d,fulup, 17jun97, add internal to object language support
+# 01c,fulup, 02jun97, add append method to engine muti loc/unlock
+# 01b,fulup, 27may97, change valid answer macanisme to allow recursive call
+# 01a,fulup, 16may97, writen
+#
+
+# Import needed modules
+# ----------------------------
+jClassImport {lang.object.*}
+
+# --------------------------------------------------
+# basic rule class define all default comportement
+# --------------------------------------------------
+class IcRuleClass {extends Object} \
+{
+  static refused-us   "Corrected dependency error first"
+  static refused-fr   "Corriger les erreurs sur les dependances"
+  static depends {}
+  static phony   0       ;# "Phony rules don't return any info to client"
+  set data-extra {}      ;# "extrat stat to send to GUI when returning from validation"
+  set data-temp  {}      ;# "trempry data are send to GUI before beeing deleted"
+  set status     Unused
+  set value      {}
+  set previous   {}
+  set param      {}
+  set tic        {-1}
+  set depends    {}
+
+  # "validation default return current input value result is OK"
+  # ------------------------------------------------------------
+  public valid {PARAM args}
+  {
+    # default validation is to return arguments as a valid value
+    set THIS(data-extra)  "value status"
+    set THIS(value)  $PARAM
+    set THIS(status) OK
+    set THIS(param)  $PARAM
+    set THIS(tic)    [clock clicks]
+  }
+
+  # "search for a message in local language inside class rule"
+  # ----------------------------------------------------------
+  public message {TYPE}
+  {
+    upvar #0 $THIS(engine) ENGINE
+    set LANG $ENGINE(lang)
+
+    # try first withing our class locate language message
+    if [info exist CLASS($TYPE-$LANG)] \
+    {
+      set THIS($TYPE) $CLASS($TYPE-$LANG)
+      set THIS(data-temp) $TYPE
+      return
+    } else {
+      # Then internal to class US message
+      if [info exist CLASS($TYPE-us)] \
+      {
+        set THIS($TYPE) $CLASS($TYPE-us)
+        set THIS(data-temp) $TYPE
+        return
+      }
+    }
+  } ;# "end message"
+
+  # "Default is returning an empty list"
+  # ------------------------------------
+  public list {args}
+  {
+    $CLASS(message) $MY list
+  }
+
+  # "return default help message depending on current selected language"
+  # --------------------------------------------------------------------
+  public tip {args}
+  {
+    $CLASS(message) $MY tip
+  } ;# "end tip"
+
+  # "return default option for a given rules"
+  # -----------------------------------------
+  public default {args}
+  {
+    $CLASS(message) $MY default
+    set THIS(data-extra)  "value status"
+  } ;# "end default"
+
+  # "return html help file for a given rules"
+  # -----------------------------------------
+  public help {args}
+  {
+    $CLASS(message) help $MY
+  } ;# "end default"
+
+  # "refused method is called whenever a dependency is missing"
+  # -----------------------------------------------------------
+  public refused {DEP_LST}
+  {
+    set THIS(data-extra)  "status"
+    $CLASS(message) $MY refused
+  } ;# "end class refused"
+
+  # "Decorate return all initiale value inclusing translation default, etc."
+  # ------------------------------------------------------------------------
+  public decorate {args}
+  {
+    # Add current values in engin answer
+    set THIS(data-extra)  "value status"
+
+    # retreive decoration from rule
+    $CLASS(message) $MY libel
+
+    if {$THIS(status) == "Unused"} \
+    {
+      # We are facing a new rule give it a default value
+      eval $CLASS(default) $MY $args
+    }
+
+    # Widget could already be in error
+    lappend THIS(data-temp)   "error"
+
+  } ;# "end decorate"
+
+  # "restore previous value"
+  # ------------------------
+  public undo {args}
+  {
+    set THIS(value) $THIS(previous)
+  } ;# "end tip"
+
+  # "cleanup lock and restore old value rule"
+  # -----------------------------------------
+  public unlock {args} \
+  {
+    # if rule not lock just return
+    if {$THIS(status) != "LCK"} {return}
+
+    # restore value previous to lock
+    if [info exists THIS(oldValue)] \
+    {
+      # just return unlock tag with previous to lock value
+      set   THIS(value)   $THIS(oldValue)
+      set   THIS(status)  $THIS(oldStatus)
+      unset THIS(oldValue)
+      unset THIS(oldStatus)
+    } else {
+      # if we don't have old value just change status
+      set   THIS(value)  {}
+      set   THIS(status) UNK
+    }
+
+    # in any case notify change and delete lock message
+    unset THIS(locked)
+    set   THIS(tic)     [clock clicks]
+
+  } ;# "end unlock"
+
+  # "set a message in message area and lock rule"
+  # ---------------------------------------------
+  public lock {PARAM args} \
+  {
+    set MSG   [lindex $PARAM 0]
+    set VALUE [lindex $PARAM 1]
+
+    # never lock twice a rule we would lock old value
+    # -----------------------------------------------
+    if {$THIS(status) == "LCK"} {return}
+
+    # save old valid value for unlock
+    # -------------------------------
+    set THIS(oldValue)  $THIS(value)
+    set THIS(oldStatus) $THIS(status)
+
+    # save lock raison in message area
+    set THIS(locked) $MSG
+    if {$VALUE != ""} {set THIS(value) $VALUE}
+
+    # timestamp last validation exec
+    set THIS(tic) [clock clicks]
+
+    # just return lock tag in order colorizing widget
+    set THIS(status) LCK
+
+  }  ;# "end lock"
+
+  # "query check or not depend list and do an action"
+  # -------------------------------------------------
+  public query {METHOD PARAM}
+  {
+    # we need engine in our context
+    upvar #0 $THIS(engine)  ENGINE
+
+    set DEP_TIC      0    ;# use to compute newest depend exec
+    set DEP_STATUS   {}   ;# default depend status is Unknow
+    set DEP_VALUES   {}   ;# default is no dependencies values
+    set DEP_FX       {}   ;# list of dependencies in error
+
+    # "depending on method we check depend or not"
+    switch -- $METHOD {
+
+     {decorate} {
+        set CHECK_DEP 1
+        set FORCE_DEP 1
+       }
+     {default} {
+        set CHECK_DEP 1
+        set FORCE_DEP 0
+       }
+     {valid}   {
+        set CHECK_DEP 1
+        set FORCE_DEP 0
+       }
+     {list}   -
+     {undo}   -
+     {lock}   -
+     {unlock} -
+     {tip}    -
+     {help}   {
+        set CHECK_DEP 0
+        set FORCE_DEP 1
+       }
+     {default} {
+       lappend ENGINE(answer) [concat $CLASS(my) "ERROR: Can't find method $METHOD"]
+       return
+     }
+    } ;# "end switch"
+
+    if {$CHECK_DEP} \
+    {
+      # loop on all dependencies before excuting command
+      foreach RL_DEP $THIS(depends) \
+      {
+        # upload in our context depend rule
+        upvar #0 $RL_DEP DEPEND
+
+        # If one rule is false all depend are considered as false
+        if {($DEPEND(status) != "FX") || ($FORCE_DEP)} \
+        {
+          # if depend rule also depend on some other rules check it
+          if {($DEPEND(depends) != {}) || ($FORCE_DEP)} \
+          {
+            $DEPEND(my) query $METHOD $THIS(param)
+          }
+
+          # check for yougest depend execution
+          if {$DEPEND(tic) > $DEP_TIC} {set DEP_TIC $DEPEND(tic)}
+
+          # prepare dependencies value before calling validating rule
+          lappend DEP_VALUES  $DEPEND(value)
+
+        } else {
+          set DEP_STATUS "FX"
+          lappend DEP_FX $RL_DEP
+        }
+      } ;# end foreach RL_DEP
+
+      # Is one error signal interface widget is in error
+      if {$DEP_STATUS  == "FX"}  \
+      {
+        set THIS(status) FX
+
+        # call refused method with missing dependencies
+        $CLASS(refused) $MY $DEP_FX
+
+      }
+    } ;# end checkdep
+
+    if {($DEP_STATUS != "FX") || ($FORCE_DEP)} \
+     {
+       # recompute function passing all depend list as parameters
+       # Note that param is forced in list even when empty
+       eval $CLASS($METHOD) $MY [list $PARAM] $DEP_VALUES
+     }
+
+    # Some rule are internal to icServer and don't return to GUI
+    if {$CLASS(phony)} return
+
+    # Prepare anwser depending on avaliable data exec tic change info
+    foreach SLOT [concat $THIS(data-extra) $THIS(data-temp)]\
+    {
+      if [info exist THIS($SLOT)] \
+        {lappend command [list $SLOT $THIS($SLOT)]}
+    }
+
+    # "effectively build the answer if we have something to say"
+    if [info exists command] \
+      {lappend ENGINE(answer) [concat $CLASS(my) $command]}
+
+    # "clean up place"
+    foreach SLOT $THIS(data-temp) \
+    {
+      if [info exists THIS($SLOT)] {unset THIS($SLOT)}
+    }
+    set THIS(data-extra) {}
+    set THIS(data-temp)  {}
+  } ;# "end check"
+
+  # "For each rule constructor save rules engine ID"
+  # "and then check/create all depending objet rules"
+  # -------------------------------------------------
+  IcRuleClass {ENG_ID}
+  {
+    # save endgine ID for further use
+    set THIS(engine) $ENG_ID
+
+    # look in depends list to getHandle object handle
+    foreach RL_CLASS $CLASS(depends) \
+    {
+      lappend THIS(depends) [$ENG_ID getHandle $RL_CLASS]
+    }
+  } ;# "end constructor"
+
+} ;# "end IcRuleClass"
+
+#----------------------------------------------------------------
+# prodive a generic rule engine, main function is to store
+# all rule objet handle in order to provide them at rule
+# construct method at client buildin time.
+# ---------------------------------------------------------------
+class IcRuleEngine {extends Object} \
+{
+  # "Where to find default text/default/help/..."
+  set lang {us}
+
+  # "search rule object handle and get value"
+  # ---------------------------------------------------
+  public value {RL_NAME}
+  {
+    # rule exist process it and return result what ever it is.
+    return [list $RL_NAME [$THIS(_rl_$RL_NAME) value]]
+  }
+
+  # "search rule object handle and lock it"
+  # ----------------------------------------
+  public lock {RL_NAMES MSG {VALUE {}}}
+  {
+    foreach RL_NAME $RL_NAMES \
+    {
+      # rule exist process it and return result what ever it is.
+      $THIS(_rl_$RL_NAME) lock $MSG $VALUE
+    }
+  }
+
+  # "search rule object handle and unlock it"
+  # ----------------------------------------
+  public unlock {RL_NAMES}
+  {
+    foreach RL_NAME $RL_NAMES \
+    {
+      # rule exist process it and return result what ever it is.
+      $THIS(_rl_$RL_NAME) unlock
+    }
+  }
+
+  # "search rule handle and dump objet"
+  # -----------------------------------
+  public rlDump {RL_NAME}
+  {
+    set CMD "array names THIS _rl_$RL_NAME"
+    set LIST [lsort [eval $CMD]]
+
+    if {$LIST == {}} \
+    {
+       # puts "WARNING: rlDump NO rule fiting patern=|_rl_$RL_NAME|"
+       return ERROR
+    }
+
+    # loop on regular expression and dump all maching rules
+    foreach SLOT $LIST \
+    {
+      # rule exist process it and return result what ever it is.
+      $THIS($SLOT) dump
+    }
+  }
+
+  # "If rule as already been instanciated return handle"
+  # "else create rule object store it in ruleEngine objet"
+  # "before returning handle"
+  # ----------------------------------------------------
+  public getHandle {RL_NAME} \
+  {
+    if {![info exist THIS(_rl_$RL_NAME)]} \
+    {
+        set THIS(_rl_$RL_NAME) [new $RL_NAME $MY]
+        if {$THIS(_rl_$RL_NAME) == "ERROR"} {return ERROR}
+    }
+    return $THIS(_rl_$RL_NAME)
+
+  } ;# "end getHandle"
+
+  # "wrapper clean up answer area call method and return result"
+  # -------------------------------------------------------------
+  public doIt {METHOD QUERY} \
+  {
+    global env
+    set RL_NAME [lindex $QUERY 0]
+    set PARAM   [lrange $QUERY 1 end]
+
+    if {![info exist THIS(_rl_$RL_NAME)]} \
+    {
+      return "ERROR: can't find |$RL_NAME| in engine"
+    }
+
+    # If rule unlock clean up answer area and start requesting
+    set    THIS(answer)    {}
+
+    # In debug mode we don't protect from wrong method for tracing
+    $THIS(_rl_$RL_NAME) query $METHOD $PARAM
+
+    return $THIS(answer)
+  }
+
+  # "destructor clean all related rule object"
+  # ------------------------------------------
+  free {}
+  {
+    # Loop on all present rule in engine and clean them
+    foreach RULE_ID [array names THIS _rl_*] \
+    {
+      free $THIS($RULE_ID)
+    }
+  }
+
+  # "Start client building with from a given top rule"
+  # --------------------------------------------------
+  IcRuleEngine {OWNER {RL_TOP all}} \
+  {
+     set THIS(owner)   $OWNER
+     set THIS(topRule) $RL_TOP
+     set THIS(_rl_$RL_TOP) [new $RL_TOP $MY]
+  } ;# "end constructor"
+
+} ;# "end IcRuleEngine"

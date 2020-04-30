@@ -1,0 +1,106 @@
+#  $Header: /Master/jTcl/jTcl/ic/Tcl/popupIc.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $
+#
+#       Copyright(c) 96-97 Fridu a Free Software Company
+#       Copyright(c) 95-96 gant Skol Veur Breizh Kreizteiz (IUP) Gwened
+#                      University of South Britany
+#
+# File      :   popupIc.tcl Handle all popup in TK
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   icRule Binding
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/ic/Tcl/popupIc.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01f,13jan98,fulup removed second free
+# 01e,11nov97,fulup changed for new dispatch strategy
+# 01d,05jun97,fulup changed popup from toplevel to placer for tclet
+# 01c,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+# 01a,02mar96,fulup writen from Spec list.tk
+#
+
+jClassImport {lang.object.*}
+
+class IcPopup {extends Object} \
+{
+
+  # "Call this each time a line is selected in popup"
+  # -------------------------------------------------
+  public select {OWNER VALUE}
+  {
+    if {($VALUE != "") && ($VALUE != "...")} \
+    {
+      # Call validation for this selection
+      $OWNER select $VALUE
+    }
+    free    $MY
+  }
+
+  # "Destructor relase all popup resource"
+  # --------------------------------------
+  free {}
+  {
+    grab release $THIS(popup)
+    destroy $THIS(popup)
+  }
+
+  # "display a list message for a widget in its own toplevel"
+  # ---------------------------------------------------------
+  IcPopup {OWNER T}
+  {
+    set THIS(popup) .popup_$MY
+    set W [$OWNER get widget]
+    set THIS(owner) $OWNER
+    set THIS(w)     $W
+
+    # compute X/Y height width from $W
+    set WX [winfo x  $W]
+    set WY [winfo y  $W]
+    set WD [winfo width  $W]
+    set WH [winfo height $W]
+
+    frame $THIS(popup) -bg blue
+    place .popup_$MY -x $WX -y $WY -width $WD -relheight 0.7
+
+    # create selection box and srollbar
+    listbox $THIS(popup).l -selectmode browse -yscroll "$THIS(popup).ys set"
+    scrollbar $THIS(popup).ys -width 5 -command "$THIS(popup).l yview"
+
+    # fill up list box
+    foreach E $T\
+    {
+      $THIS(popup).l insert end [string trim $E]
+    }
+    $THIS(popup).l insert end "..."
+
+    # pack in wanted order
+    pack $THIS(popup).ys -side right -fill y
+    pack $THIS(popup).l  -side left -expand yes -fill both
+
+    # fixe absolute size for popup
+    bindtags  $THIS(popup).l "Listbox All . $THIS(popup).l"
+    bind $THIS(popup).l <Key-Escape>      "free $MY"
+
+    # set selected line to be copied into entry field WARNING: active is not valid at registration
+    bind $THIS(popup).l <ButtonRelease-1> "$CLASS(select) $MY $OWNER \[$THIS(popup).l get active\]"
+    bind $THIS(popup).l <Return>          "$CLASS(select) $MY $OWNER \[$THIS(popup).l get active\]"
+
+    # Force grab onto listbox
+    after 100 "grab  $THIS(popup); focus $THIS(popup).l"  ;# create trouble under tclet 8a1
+    focus $THIS(popup).l
+
+  } ;# "end constructor"
+
+} ;# "end IcPopup class"
+
+
+
+
+

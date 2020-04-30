@@ -1,0 +1,52 @@
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   rpcHttpd.tcl Simple HTTPD RPC web server
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   tcl/jTcl/demo
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:20 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/Rpc/server/Tcl/httpdAdrDemo.jTcl,v $
+#
+# Modification History
+# --------------------
+# 01a,27mar97,fulup written
+#
+
+#--------------------------------------------------------------------
+# This web server start a RPC http server, it it as no specific
+# extention and use TcpHttpdRpc as it is.
+#--------------------------------------------------------------------
+package require jTcl
+jClassImport {tcp.rpc*}
+
+# cookie example
+# --------------
+proc demo.adr.server.start {{PORT 1234}} {
+  global env
+  global tk_library
+
+  # Take either development or runtime version
+  set ROOT_DIR    [jClassName {demo.adr.root.*}]
+  set AUTO        [jClassName {demo.adr.auto.*}]
+  set INDEX       [jClassName {demo.adr.index.*}]
+
+  # create a new cookie and set some minimum methode
+  set SERVER_ID  [new TcpHttpdRpc $PORT $ROOT_DIR $AUTO $INDEX]
+
+  # if avaliable use tk waiting loop
+  if [info exists tk_library] {return $SERVER_ID}
+
+  puts "Wait for Brooser connection http://localhost:$PORT/"
+
+  $SERVER_ID vwait
+  free $SERVER_ID
+
+} ;# end demo.rpcHttpd.start
+
+if {![info exists DEMO_IT]} {eval demo.adr.server.start [lindex $argv 0]}
+

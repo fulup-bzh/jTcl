@@ -1,0 +1,135 @@
+#  $Header: /Master/jTcl/jTcl/ic/Tcl/dispatchIc.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $
+#
+#         Copyright(c) 96-97 Fridu a Free Software Company
+#         Copyright(c) 95-96 gant Skol Veur Breizh Kreizteiz (IUP) Gwened
+#                      University of South Britany
+#
+# File      :   dispatch.tcl  dispatch rules event on TK interface
+# Projet    :   jTcl
+# SubModule :   ic rules
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Modification: Written
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/ic/Tcl/dispatchIc.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01g,11nov97,fulup adpated to new binding strategy
+# 01h,06aug97,crepet added the radiobutton case in display method
+# 01g,17jun97,fulup added global remote global var set and remote callback
+# 01f,02jun97,fulup colorize button on validation return
+# 01e,30may97,fulup cleanup action on server die
+# 01d,20may97,fulup patched for jIc rule engine
+# 01c,04mar97,fulup add auto depend validation
+# 01b,28feb97,fulup released jTcl
+# 01a,fulup,24feb96 writen
+#
+
+  jClassImport {ic.help.*}
+  jClassImport {ic.popup.*}
+  jClassImport {ic.error.*}
+
+# display Valid Value
+# ---------------------
+class IcDispatch {extends IcHelp} \
+{
+ set status  Unknow
+ set value   Unknow
+
+  # "Focus widget"
+  # -------------
+  public focus {}
+  {
+    focus $THIS(widget)
+  }
+
+  # "Help display a message in a popup"
+  # ----------------------------------
+  public TIP {MSG}
+  {
+    set THIS(tip) $MSG
+    $CLASS(popup) $MY
+  }
+
+  # "Display an error message in agregated errorId"
+  # ----------------------------------------------
+  public ERR {MSG}
+  {
+    set THIS(error) $MSG
+    $THIS(errorId) add $MY
+  }
+
+  # "Create a popup and ask user for a choice"
+  # ------------------------------------------
+  public LST {LIST}
+  {
+    new IcPopup $MY $LIST
+  }
+
+  # "Display message in common area"
+  # --------------------------------
+  public MSG {MSG}
+  {
+    $THIS(errorId) display Message $MSG
+  }
+
+  # "set new status of widget and paint widget"
+  # -------------------------------------------
+  public STS {STATUS}
+  {
+    # "save current status for further use"
+    set THIS(status) $STATUS
+
+    # "if not in error check and eventualy remove it from errorList"
+    if {$STATUS == "OK"} {$THIS(errorId) del $MY}
+
+    # "pain widget depending on status"
+    $CLASS(paint)    $MY $STATUS
+  }
+
+  # "display new value of widget"
+  # -----------------------------
+  public VAL {DATA} \
+  {
+     $THIS(widget) configure -text $DATA
+  }
+
+  # "display new value of widget"
+  # -----------------------------
+  public LBL {DATA} \
+  {
+     $THIS(widget) configure -text $DATA
+  }
+
+  # "loop on global return and call adequate display proc"
+  # -------------------------------------------------------
+  public update {FRAME} \
+  {
+    # "Data can be done of many action to do in widget"
+    foreach SLOT $FRAME \
+    {
+      set ACTION [lindex $SLOT 0]
+      set DATA   [lindex $SLOT 1]
+
+      switch $ACTION \
+      {
+       {status}  {$CLASS(STS) $MY $DATA}
+       {list}    {$CLASS(LST) $MY $DATA}
+       {message} {$CLASS(MSG) $MY $DATA}
+       {libel}   {$CLASS(LBL) $MY $DATA}
+       {refused} -
+       {error}   {$CLASS(ERR) $MY $DATA}
+       {tip}     {$CLASS(TIP) $MY $DATA}
+       {value}   {$CLASS(VAL) $MY $DATA}
+       {default} {$CLASS(ERR) $MY \
+          [list ERROR: $CLASS(my)/$THIS(rule) Unknow method $ACTION]
+       }
+      }
+    }
+  } ;# "end update"
+} ;# "end class IcDispatch"

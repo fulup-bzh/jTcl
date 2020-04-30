@@ -1,0 +1,10 @@
+La variable autopath n'est pas prise en compte car le fihcier
+slave.jTcl n'est pas trouve, verifier dans le scanning des
+directories que le fichier et bien trouve puis ajoute dans jTclPath.
+
+Puis source d'un fichier program qui est IMPORT et sur lequel l'inter slave
+fait in jClassImport. Ceci source le program user en mode jTcl direct.
+Si pas de mask utiliser le mask rpc.auto
+
+Refaire fonctionner la demo en placant la class HtmlAdr dans un fichier a
+part pris en compte par l'import.

@@ -1,0 +1,67 @@
+#  $Header: /Master/jTcl/jTcl/ic/Tcl/helpIc.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $
+#
+#       Copyright(c) 96-97 Fridu a Fridu Sotfware Company
+#  Copyright(c) 95-96 gant Skol Veur Breizh Kreizteiz (IUP) Gwened
+#                      University of South Britany
+#
+# File      :   helpIc.tcl  ic/Tk help module interface
+# Projet    :   cTest
+# SubModule :   icRule binding
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/ic/Tcl/helpIc.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01c,11nov97,fulup adapted to new dispatch strategy
+# 01b,28feb97,fulup released jTcl
+# 01a,02mar96,fulup writen from Spec help.tk
+#
+
+jClassImport {lang.object.*}
+
+class IcHelp {extends Object} \
+{
+ public message {} \
+ {
+   # subcontract help error message objet to display mono line help
+   $THIS(errorId) tip $MY
+ } ;# "end message"
+
+ # "display a help message for a widget in its own toplevel"
+ # ---------------------------------------------------------
+ public popup {}
+  {
+    # if already exist detroy old help field
+    catch {destroy .help}
+
+    # compute X/Y position from $W position
+    set X [winfo rootx  $THIS(widget)]
+    set Y [winfo rooty  $THIS(widget)]
+    set H [winfo height $THIS(widget)]
+
+    # create top level help widget with no window manager decoration
+    toplevel .help
+    wm overrideredirect .help 1
+
+    # set help message and display it
+    label .help.l -text $THIS(tip) -relief raised -bg Bisque1 -bd 2
+    pack  .help.l
+
+    # place help window WARNING: help should not unfocus entry widget
+    wm geometry .help +[expr $X + 20]+[expr $Y + $H]
+
+    # If mouse leave widget destroy help popup and restore stdbinding
+    bind $THIS(widget) <Leave> "
+       destroy .help
+       bind $THIS(widget) <Leave> {after cancel \$_WD_ID}
+    "
+
+  } ;# "end popup"
+
+} ;# "end class IcHelp"

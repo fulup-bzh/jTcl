@@ -1,0 +1,210 @@
+# $Header: /Master/jTcl/zDemo/Tcp/server/Tcl/fileTcpDemo.jTcl,v 1.2 1999/03/08 08:34:21 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   fileTcpDemo.tcl Simple TCP file server
+# Projet    :   jTcl-Demo
+# SubModule :   Tcp/server
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:21 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/Tcp/server/Tcl/fileTcpDemo.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01c,01dec97,fulup adapted to jTcl-3.X tree
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+#
+
+#--------------------------------------------------------------------
+# This program is a TCP server it wait for command on a TCP socket
+# command as to send as single word on a single line command should
+# be finish with an empty line.
+# Example: read\n/etc/pass\n\n, command can be send with
+# telnet localhost 1234  or with demo:client 1234 where 1234=TCPport
+# I  use it with students as an introduction to HTTP protocol.
+#--------------------------------------------------------------------
+
+# Import mandatory modules
+# ---------------------------
+ package require jTcl
+ jClassImport {tcp.server.*}
+
+# This class will handle all incomming client communications
+# ----------------------------------------------------------
+class DemoFileCl {extends TcpServerCl} \
+{
+  # "This routine echo all character on fileSv channel for incomming channel"
+  # -------------------------------------------------------------------------
+  public read {} \
+  {
+   set IN_LINE [gets $THIS(in)]
+
+   # If Eof subcontract fileSv method for handling execption
+   if {[eof $THIS(in)]} \
+   {
+      free   $MY
+      return
+   }
+
+   # if line is not empty we are facing a command line
+   if {$IN_LINE != {}} \
+   {
+       lappend THIS(buffer) $IN_LINE
+       return
+   }
+
+   # we are now facing a complete command call FileSv method to process it
+   set REPONSE [$THIS(server) process $THIS(buffer)]
+
+   # send reponse to client
+   foreach BLOCK $REPONSE \
+   {
+     puts $THIS(out) $BLOCK
+   }
+
+   # send a new promp and clear read buufer
+   puts  $THIS(out) "?"
+   flush $THIS(out)
+   set    THIS(buffer) {}
+
+  } ;# "end read"
+
+  # "use authentifaction method to send wellcome message"
+  # ----------------------------------------------------
+  public auth {} \
+  {
+   puts $THIS(out) \
+   {
+   Welcome to demo.fileSv server
+   =============================
+      Input Syntaxe is.
+      -----------------
+        Command      read | write
+        FileName     Any valid file Name
+        line 1       +
+        ....         |-For Write command only
+        line n       +
+        \\n          An emply line
+      Ouput Syntaxe is.
+      -----------------
+        Read  command. Return File line on Channel
+        Write command. Return Ok or an error Status
+      Note. For Security raison demo.fileSv can't write on existing file
+  ?}
+  flush $THIS(out)
+
+   return OK                      ;# We don't care about authentification
+  } ;# "end auth"
+
+  # "Constructor called at each client accept"
+  # ------------------------------------------
+  DemoFileCl {SERVER_ID HOST SOCK PORT}
+  {
+    # Only super Class constructor need this
+    $SUPER $MY $SERVER_ID $HOST $SOCK $PORT
+  }
+
+} ;# end class DemoFileCl
+
+# FileSv class handle remote command evalution under tcl interpretor
+# ------------------------------------------------------------------
+class DemoTcpFile {extends TcpServer} \
+{
+ # "override server client class"
+ static clientsClass DemoFileCl
+ static secure       1  ;# "we use auth proc"
+ # "Leave when less than 1 client [no Client]"
+ set clientsMin 1
+
+  # "Process a user command"
+  # ------------------------
+  public process {REQUEST} \
+  {
+    # Parse command
+    set COMMAND  [string trim [lindex $REQUEST 0]]
+    set FILENAME [lindex $REQUEST 1]
+
+    switch -- $COMMAND \
+    {
+      {read} \
+        {
+          if {[catch {open $FILENAME} FILE_ID]} \
+          {
+             set ANSWER [list "ERROR.$FILE_ID"]
+          } else {
+             # Bug we only read file smaller than 9999 Bytes
+             set ANSWER [read $FILE_ID 9999]
+          }
+        }
+      {write} \
+        {
+          if {[catch {open $FILENAME} FILE_ID]} \
+          {
+            if {[catch "open $FILENAME w" FILE_ID]} \
+            {
+              set ANSWER  [list "ERROR.$FILE_ID"]
+            } else {
+              # Data to write start at 3th slot of REQUEST
+              foreach LINE [lrange $REQUEST 2 end] \
+              {
+                 puts $FILE_ID $LINE
+              }
+              set ANSWER [list "OK. $FILENAME created"]
+            }
+          } else {
+            # File exist refused to overwrite it
+            set ANSWER [list "ERROR. $FILENAME already exists use delete command first"]
+          }
+        }
+      {default} \
+        {
+          set ANSWER [list "ERROR. Unknow command \[$COMMAND\] use read|write"]
+        }
+    }
+
+    # Close any opened file
+    catch {close $FILE_ID}
+
+    return $ANSWER
+
+  } ;# "end process"
+
+  # "DemoTcpFile constructor just pass constructor params to super class"
+  # --------------------------------------------------------------------
+  DemoTcpFile {PORT}
+  {
+    $SUPER $MY $PORT
+  }
+
+} ;# "end class DemoTcpFile"
+
+# fileSv example start entry point
+# -----------------------------------
+proc demo.tcp.fileSv.start {{PORT 1234}} \
+{
+  global tk_library
+
+  set SERVER_ID [new DemoTcpFile $PORT]
+
+  # in tk we use waiting loop
+  if [info exists tk_library] {return $SERVER_ID}
+
+  # Check our fileSv slots
+  $SERVER_ID dump All
+
+  # loop forever on event dispaching
+  puts "fileSv waiting for commands on port.$PORT \[use telnet localhost $PORT\] to connect"
+  $SERVER_ID vwait
+
+  free $SERVER_ID
+
+} ;# end demo.fileSv.start
+
+if {![info exists DEMO_IT]} {eval demo.tcp.fileSv.start [lindex $argv 0]}
+

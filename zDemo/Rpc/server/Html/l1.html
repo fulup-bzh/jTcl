@@ -1,0 +1,64 @@
+<HEAD>
+<SCRIPT>
+//---------------------------------------------------
+// Application 	: dselect.htm
+// Fichier 	: l1.htm
+// Auteur 	: JM Inglebert - IUT de Vannes
+// Mail 	: Jean-Michel.Inglebert@iu-vannes.fr
+//---------------------------------------------------
+
+var debug = false
+
+//=============
+// UTILITAIRES
+//=============
+
+function afficheTab(tab)
+// tab : tableau à afficher
+// --
+// Affiche tous les éléments du tableau tab
+// dans la fenêtre courante
+// --
+{
+  for (var i = 0; i < tab.length; i++)  
+   {
+    document.write(tab[i],"-")
+   }
+  document.write("<BR>")
+}
+
+//=======================
+// DONNEES et PROCEDURES
+//=======================
+
+// les items de l'élément select
+tabItems = new Array("L1","Brest","Lorient","Rennes","Vannes")
+
+if (debug) {afficheTab(tabItems)}
+
+// les noms des boutons
+tabButtons = new Array("L1.button1","L1.button2","fClientl1")
+// et leurs proc de réaction
+tabFButtons = new Array("alert","confirm","fClientl1")
+
+// le fichier de datas suivant
+nextDatas = "l2.html"
+
+</SCRIPT>
+</HEAD>
+
+<BODY>
+ <H2>L1.htm : Fichier de données d'initialisation d'interface</H2>
+</BODY>
+</HTML>
+
+<SCRIPT>
+//==============================
+// ACTIONS DE FIN DE CHARGEMENT
+//==============================
+
+ // 
+ // synchronise la MAJ en fin de chargement
+ // par un reload de la frame "client"
+ parent.frames[0].location=parent.frames[0].location
+</SCRIPT>

@@ -1,0 +1,34 @@
+<HEAD>
+<TITLE>dselect</TITLE>
+<SCRIPT>
+//---------------------------------------------------
+// Application 	: dselect.html
+// Fichier 	: dselect.html
+// Auteur 	: JM Inglebert - IUT de Vannes
+// Mail 	: Jean-Michel.Inglebert@iu-vannes.fr
+// Pour l'utiliser tu dois modifier la ligne suivante dans L1.htm et  L2.htm
+// nextDatas = "file:///C:/JMI/E/DHTML/L2.htm"
+//---------------------------------------------------
+
+var debug = true
+
+//--
+// Construit dans la première frame une interface
+// paramétrée par les données de la seconde frame
+//--
+</SCRIPT>
+
+</HEAD>
+<SCRIPT>
+ if (debug) 
+  { document.write("<FRAMESET ROWS='100%,10%'>") }
+ else  
+  { document.write("<FRAMESET ROWS='100%,1%'>") }
+</SCRIPT>
+
+   <FRAME SRC=select.html NAME="selectFrame">
+   <FRAME SRC=l1.html NAME="dataFrame">
+</FRAMESET>
+
+
+<HTML>

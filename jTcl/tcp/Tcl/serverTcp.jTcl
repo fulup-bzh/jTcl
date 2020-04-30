@@ -1,0 +1,197 @@
+# $Header: /Master/jTcl/jTcl/tcp/Tcl/serverTcp.jTcl,v 1.2 1999/03/08 08:34:19 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   serverTclNet Generic TCL server
+# Projet    :   Fridu Realtime Booster
+# SubModule :   TCP/Tcl network class
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:19 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/tcp/Tcl/serverTcp.jTcl,v $
+#      State       : $State: Exp $
+#
+#
+# Modification History
+# --------------------
+# 01f,29jan98,fulup moved accept public add secure class variable
+# 01e,14jan98,fulup minor change for jTcl 3.XX
+# 01d,19jun97,fulup added free clients when freeing server and passed server clog to client
+# 01c,10mar97,fulup move vwait declaration into instance variable
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+#
+
+jClassImport {tcp.channel.*}
+
+# "Add rfc931 authentification to channel mecanisme"
+# --------------------------------------------------
+class TcpServerCl {extends TcpChannel} \
+{
+  # "Remote user identification rfc1413 (rfc931 obsolete)"
+  # ------------------------------------------------------
+  public auth {} \
+  {
+   # Save server link could be usefull later for broadcasting or ...
+
+   # Create a new client channel to remote autentification server 113=port RFC931
+   if {[catch \
+   {
+        set SOCK_rfc931 [socket $THIS(host) 113]
+
+        # Write out autentification request to remote
+        puts  $SOCK_rfc931 "$THIS(port),[$THIS(server) get port]"
+        flush $SOCK_rfc931
+
+        # read answer from rfc931 authentification server
+        set LINE [gets $SOCK_rfc931]
+
+        # Extract logname from rfc931 string
+        set THIS(user) [lindex $LINE end]
+
+        close $SOCK_rfc931
+    }]} {
+      set THIS(user) "Unknow"
+      return FX
+    }
+
+   debug.msg rfc931 $THIS(user)
+   return OK
+  } ;# "rfc931"
+
+  # "This method is called each time a client a refused"
+  # ----------------------------------------------------
+  public refused {args}
+  {
+    puts $THIS(out) $args
+    free $MY
+  }
+
+  # "Sub class server client destructor"
+  # ------------------------------------
+  free {} \
+  {
+    # When a client leave update server clients list
+    $THIS(server) clientLeaved $MY
+  } ;# "free"
+
+  TcpServerCl {SERVER_ID HOST SOCK PORT} \
+  {
+    upvar #0 $SERVER_ID SERVER
+     # Update TcpServerCl channel instance variables
+     set THIS(server) $SERVER_ID
+     set THIS(host)   $HOST
+     set THIS(port)   $PORT
+     set THIS(clog)   $SERVER(clog)
+
+     # Init Channel with communication channel
+     $SUPER $MY $SOCK
+  } ;# "end TcpServerCl constructor"
+
+} ;# "end Class TcpServerCl"
+
+class TcpServer {extends Object} \
+{
+  # "set default class for TcpServer client"
+  static clientsClass TcpServerCl
+  static  vwait         _TCP_SV_VWAIT
+  static secure 0  ;# "if true server will check auth result"
+
+  # "Default Server instance varaibles"
+  set clientsAddr   {}
+  set clientsNum    0
+  set clientsMin    0
+  set clientsMax    64
+
+  # "vwait event loop wait until no more clients present"
+  # -----------------------------------------------------
+  public vwait {}
+  {
+    global $CLASS(vwait)
+
+    # loop forever
+    while {1} \
+    {
+      eval vwait $CLASS(vwait)   ;# effectively wait and dispacht binded events
+      if {$THIS(clientsNum) < $THIS(clientsMin)} \
+      {
+        $MY log No more client server leaving
+        break
+      }
+    }
+  } ;# "end vwait"
+
+  # "TcpServerCl leaved update server internal list & counter"
+  # ----------------------------------------------------------
+  public clientLeaved {CLIENT_ID} \
+  {
+    global $CLASS(vwait)
+
+    set  THIS(clientsAddr)  [ldelete $THIS(clientsAddr) $CLIENT_ID]
+    incr THIS(clientsNum)   -1
+    $MY  log channel $CLIENT_ID leaved
+
+    # Notify event to main event loop if no more client
+    if {$THIS(clientsNum) == 0} \
+    {
+      set $CLASS(vwait) [list LEAVED $CLIENT_ID]
+    }
+
+  } ;# "end clientLeave"
+
+  # "event accepting procedure"
+  # ----------------------------
+  public accept {SOCK CLIENT_HOST PORT} \
+  {
+    # Create a new socket channel for each new incomming client
+    fconfigure $SOCK -blocking 0 -translation {auto crlf}
+    set CLIENT_ID [new $CLASS(clientsClass) $MY $CLIENT_HOST $SOCK $PORT]
+
+    # Append this new client to server list before autentification
+    lappend THIS(clientsAddr) $CLIENT_ID
+    incr    THIS(clientsNum)  +1
+
+    # call remote identification
+    if {($CLASS(secure)) && ([$CLIENT_ID auth] != "OK")} \
+    {
+       $MY log    Authentification refused $CLIENT_ID error]
+       $CLIENT_ID refused Security Remote client authentification refused
+       return     ;# if hook fail dont bind read event
+    }
+
+    # Check we did not bypass our maximun
+    if {$THIS(clientsMax) == $THIS(clientsNum)} \
+    {
+       $MY log    Server max client reached
+       $CLIENT_ID refused Overload Server max=$THIS(clientsNum) clients reached
+       return     ;# if hook fail dont bind read event
+    }
+
+    $MY log new client:$CLIENT_HOST on Channel $CLIENT_ID
+  } ;# "end accept"
+
+  # "Close socket when server leave"
+  # --------------------------------
+  free  {}
+  {
+    foreach CLIENT_ID $THIS(clientsAddr) {free $CLIENT_ID}
+    close $THIS(socket)
+  }
+
+  # "Server constructor"
+  # --------------------
+  TcpServer {PORT} \
+  {
+    # Bind accept event to a private proc
+    set THIS(port)         $PORT
+    if [catch {socket -server "$MY accept" $PORT} THIS(socket)] \
+    {
+      # break execution now
+      $MY signal "can't use port=$PORT\nERR=|$THIS(socket)|"
+    }
+  } ;# "end Constructor"
+
+} ;# "end class TcpServer"

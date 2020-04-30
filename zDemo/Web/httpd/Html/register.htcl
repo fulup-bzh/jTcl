@@ -1,0 +1,121 @@
+# $Header: /Master/jTcl/zDemo/Web/httpd/Html/register.htcl,v 1.2 1999/03/08 08:34:21 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   register.htcl build an HTML list with registrated modules
+# Projet    :   Rubicon
+# SubModule :   Demo/Web
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:21 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/Web/httpd/Html/register.htcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01a,16mar98,fulup written
+#
+
+
+# Build a pseudo hierarchical graphic with package
+# ------------------------------------------------
+proc placeIt {PKG} {
+ global PAGE
+ global STATIC
+ global JTCL_FILE
+
+ # we only process jTcl files
+ if {[file extension $JTCL_FILE($PKG)] != ".jTcl"} {return}
+
+ # cut package name
+ set NAME  [split $PKG "."]
+ set LEN   [expr [llength $NAME] -3]
+ set LEV_2 ""
+ set LEV_1 ""
+
+ # Check level two of indentation did not change
+ if {$LEN > 1} {
+   if {[lindex $NAME 1] != $STATIC(prevLev2)} {
+     set INDENT 1
+     set LEV_2 "<img src=/Images/green-ball.gif>[lindex $NAME 1]<ul>"
+   } else {
+     set INDENT 2
+   }
+ } else {
+   set INDENT 1
+ }
+
+ # check level one of indentention did not change
+ if {[lindex $NAME 0] != $STATIC(prevLev1)} {
+   set INDENT 0
+   set LEV_1 "<img src=/Images/blue-ball.gif>[lindex $NAME 0]<br><ul>"
+ }
+
+ # print package name at a valid position for current level
+ for {set ind $INDENT} {$ind < $STATIC(prevIndt)} {incr ind} {
+    lappend PAGE "</ul>"
+ }
+
+ lappend PAGE "$LEV_1 $LEV_2 <img src=/Images/yellow-ball.gif>
+               <a href=$PKG.pkg> [lindex $NAME $LEN]</a><br>
+ "
+
+ # save level for next run
+ set STATIC(prevLev1) [lindex $NAME 0]
+ set STATIC(prevLev2) [lindex $NAME 1]
+ set STATIC(prevIndt) $LEN
+
+} ;# end placeIt
+
+# Build an array from jTcl register
+# ---------------------------------
+set LOADED    [lindex [jClassDump] 0]  ;# return already loaded jTcl package
+set AVALIABLE [lindex [jClassDump] 1]  ;# return avaliable package in JTCL_PATH
+global env
+global JTCL_FILE
+global STATIC
+  set  STATIC(prevLev1)  ""
+  set  STATIC(prevLev2)  ""
+  set  STATIC(prevIndt)  0
+
+# Build fridu title
+# -----------------
+lappend PAGE "
+ <center>
+    <img src=/Images/friduLogo.gif>
+  <br>
+  <b>Fridu a Free Software Company</b>
+  </center>
+  <ul>
+ "
+
+# Build a list with all loaded package
+# -------------------------------------
+lappend PAGE "<img src=/Images/package-index.gif> <b>Curentelly Loaded</b><ul>"
+foreach PKG $LOADED {
+   # we only display valid jTcl file
+   if {(![info exist JTCL_FILE([lindex $PKG 1])])
+      || ([file extension $JTCL_FILE([lindex $PKG 1])]) != ".jTcl"} {continue}
+   lappend PAGE "<img src=/Images/red-ball.gif>
+                 <a href=[lindex $PKG 1].pkg> [lindex $PKG 1]</a><br>
+   "
+}
+
+# print all registrated package
+# -----------------------------
+lappend PAGE "<p><p></ul><img src=/Images/package-index.gif><b>Locally Avaliables</b><ul>"
+foreach PKG $AVALIABLE {placeIt $PKG}
+
+for {set ind $STATIC(prevIndt)} {$ind >0} {incr ind -1} {
+ lappend PAGE "</ul>"
+}
+
+lappend PAGE "<p><img src=/Images/cyan-ball.gif><b>JTCL_PATH</b>=$env(JTCL_PATH)"
+
+# close page
+# ----------
+lappend PAGE "</ul>"
+

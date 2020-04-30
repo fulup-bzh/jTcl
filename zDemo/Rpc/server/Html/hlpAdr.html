@@ -1,0 +1,60 @@
+<comment>
+; $Header: /Master/jTcl/zDemo/Rpc/server/Html/hlpAdr.html,v 1.2 1999/03/08 08:34:20 fulup Exp $
+;
+;  Copyright(c) 1996-97 FRIDU a Free Software Company
+;
+; File      :   hlpAdr.html Mini help on adr- httpd/rpc demo
+; Projet    :   Fridu a Realtime Booster
+; SubModule :   jTcl Java-like TCL and Fridu TCL extention
+; Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+;
+; Last
+;      Author      : $Author: fulup $
+;      Date        : $Date: 1999/03/08 08:34:20 $
+;      Revision    : $Revision: 1.2 $
+;      Source      : $Source: /Master/jTcl/zDemo/Rpc/server/Html/hlpAdr.html,v $
+;      State       : $State: Exp $
+;
+; Modification History
+; --------------------
+; 01a,29mar97,fulup Written
+;
+;
+</comment>
+
+<html>
+<body bgcolor="#ffffff">
+<p>
+
+<plain-text>
+
+  <center><b>Demonstration Httpd-Rpc</b></center>
+  <p>This small demo store adress in a private TCL interpretor inside
+  httpd server. Each user as a private connection that is attached to
+  browser true a cookie, life time for those cookies is 15mn
+  and if a user burn this watch dog timeout between two commands session
+  is automaticaly closed.
+
+  <p><ul>
+  <p><li><b>Key</b> Each adress is stored taking lowercase name in a
+  Tcl array, nothing is saved onto disk and everyting is detroyed at session
+  end.
+
+  <p><li><b>Login</b> Login is mandatory but no controle is done on
+  user/password, nevertheless login form call user.login Tcl routine
+  in which develper should place apropriate control.
+
+  <p><li><b>Internal</b> For each new login, Httpd server creates a new
+  slave interpretor that is added server's RootDir/Tcl in autopath.
+  Interpretor name is return in a cookie for further transactions from
+  client browser. Each form with .rpc mime extention action is excetuted
+  inside private to session interpretor. This mecanisme garantie a private
+  names and commands space inside Tcl for each independant browsers client.
+
+  <p><li><b>Modification</b> Tcl rpc Adr routines are located in $JTCL/Html/Tcl, tclIndex
+  should be updated when adding new rpc routines, related html files
+  are in $JTCL/Html dir and are adr prefixed.
+  </ul>
+
+</body>
+</html>

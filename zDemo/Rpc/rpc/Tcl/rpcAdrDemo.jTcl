@@ -1,0 +1,182 @@
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company [fridu@fridu.bzh]
+#
+# FILE      :   adrHtml.tcl create a address book in RAM for demo
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   tcl/jTcl/Html
+# Auteur    :   Fulup Ar Foll [fulup@fridu.bzh]
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:20 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/Rpc/rpc/Tcl/rpcAdrDemo.jTcl,v $
+#
+# Modification History
+# --------------------
+# 01c,29apr97,fulup moved to RPC_ARGS params
+# 01b,28mar97,fulup apply first rewiew
+# 01a,26mar97,fulup written
+#
+
+# ----------------------------------------------------------------------------
+# HtmlAdress is a demo class that store address in using NAME as key
+# this application don't save on disk.
+# Note: This ptogram is useless it just demonstrate how login session works
+# ----------------------------------------------------------------------------
+
+# In development tree program can be start outside demoIt.tcl
+jClassImport {lang.serial.*}
+
+# We create new object for each new adress
+# ----------------------------------------
+class Adress {extends Object} \
+{
+  Adress {NAME FIRST STREET TOWN ZIP TEL EMAIL}
+  {
+    set THIS(name)   $NAME
+    set THIS(first)  $FIRST
+    set THIS(street) $STREET
+    set THIS(town)   $TOWN
+    set THIS(zip)    $ZIP
+    set THIS(tel)    $TEL
+    set THIS(email)  $EMAIL
+  }
+} ;# "end Adress"
+
+# "Main class keep track of all registrated adress"
+# -------------------------------------------------
+class HtmlAdress {extends Object} \
+{
+
+  # "retreive an address using name as an array"
+  public load {}
+  {
+   # upload parameter from html
+   upvar #0 RPC_ARGS   ARGS
+
+    # ignore case for searching key
+    set NAME [string tolower $ARGS(NAME)]
+
+    # If address don't exist return a message
+    if {![info exists THIS(_adr_$NAME)]} \
+    {
+      return [list "<br><b>ERROR: no name registrated with key=$NAME</b>"]
+    }
+
+    # upload adress in our current context
+    upvar #0 $THIS(_adr_$NAME) ADR
+
+    # If address exist return feel up page
+    lappend PAGE "<body bgcolor=#ffffff>"
+    lappend PAGE "<c><b>ADRESS for key=$ARGS(NAME) is:<br>"
+    lappend PAGE "<br>Name:      $ADR(name)"
+    lappend PAGE "<br>First Name:$ADR(first)"
+    lappend PAGE "<br>Street:    $ADR(street)"
+    lappend PAGE "<br>Town:      $ADR(town)"
+    lappend PAGE "<br>Zip:       $ADR(zip)"
+    lappend PAGE "<br>Tel:       $ADR(tel)"
+    lappend PAGE "<br>Email:     $ADR(email)"
+
+    return $PAGE
+  }
+
+  # "Place a new or replace and old address in object"
+  public store {}
+  {
+   # upload parameter from html
+   upvar #0 RPC_ARGS   ARGS
+
+    # save in array incomming data
+    set THIS(_adr_[string tolower $ARGS(NAME)]) \
+         [new Adress $ARGS(NAME) $ARGS(FIRST) $ARGS(STREET) \
+          $ARGS(TOWN) $ARGS(ZIP) $ARGS(TEL) $ARGS(EMAIL)]
+
+    lappend PAGE "
+     <body bgcolor=#ffffff>
+     <br>Address created with key: $ARGS(NAME)
+    "
+
+    return $PAGE
+  }
+
+  # "Destructor serializa file on disk"
+  free {} \
+  {
+    jSerialStore $MY $THIS(fileName)
+  }
+
+  # "Constructor checl if if will be possible to save on file"
+  HtmlAdress {FILE_NAME}
+  {
+     if [catch {open $FILE_NAME w} FD] \
+     {
+       puts "Warning won't store on logout"
+     } else {
+       close $FD
+       set THIS(fileName) $FILE_NAME
+     }
+  }
+} ;# "end HtmlAdress"
+
+# Create a dummy interface httpd eval method don't can't handle object directely
+proc adrSetHtml.rpc {} \
+{
+  global HTML_ADR_ID
+
+  return [$HTML_ADR_ID store]
+}
+
+proc adrGetHtml.rpc {} \
+{
+  global HTML_ADR_ID
+
+  return [$HTML_ADR_ID load]
+}
+
+# either when user exit slave interp and when rpc timeout
+# Note that this command is exec in slave context even
+# when call automaticaly on watchdog timeout.
+# --------------------------------------------------------
+proc logout {} \
+{
+ global HTML_ADR_ID
+   free $HTML_ADR_ID
+}
+
+
+# This proc is call when user logout it notify logout
+# -------------------------------------------------------
+proc adr.logout {} \
+{
+   # Note free boject on logout because of connection timeout
+   return [list URL out.html]
+}
+
+
+# In demo mode there is no controle on login
+proc adr.login {}  \
+{
+ global HTML_ADR_ID
+ global env
+ # upload parameter from html
+ upvar #0 RPC_ARGS   ARGS
+
+   # file name is compose of tempdir + user name
+   set TMP  /tmp
+   set USER unknow
+   if [info exists env(TEMP)]    {set TMP $env(TEMP)}
+   if [info exists env(TMPDIR)]  {set TMP $env(TMPDIR)}
+   set FILE_NAME [file join $TMP $ARGS(LOGIN)-jTcl.obj]
+
+   # At login time create Adress Object of take one from file
+   if {![file exist $FILE_NAME]} \
+   {
+      set HTML_ADR_ID [new HtmlAdress $FILE_NAME]
+   } else {
+      set HTML_ADR_ID [jSerialLoad $FILE_NAME]
+   }
+
+   # After login we send a new URL in input frame (ERROR then auth is refused)
+   return [list URL in.htcl]
+}

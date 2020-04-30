@@ -1,0 +1,145 @@
+# $Header: /Master/jTcl/zDemo/Web/httpd/Tcl/httpdWebDemo.jTcl,v 1.2 1999/03/08 08:34:21 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   httpdWebDemo.tcl Simple HTTPD web server
+# Projet    :   jTcl-Demo
+# SubModule :   Web/Server
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:21 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/Web/httpd/Tcl/httpdWebDemo.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01d,01dec97,fulup adapted to new 3.X tree
+# 01c,18mar97,fulup adapted to new mime Httpd super class strategie
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+#
+
+#--------------------------------------------------------------------
+# This program is a WEB server it wait for httpd command on a
+# TCP socket httpd commands finish with an empty line
+# Then process file is file end with thtml is is localy process
+# all other mime extention are return to super class
+#--------------------------------------------------------------------
+
+package require jTcl
+
+jClassImport {tcp.httpd.*}
+jClassImport {demo.web.tcl2html.*}
+
+# DemoTcpHttpd extents standard httpd adding a method for .thtml files
+# ---------------------------------------------------------------
+class DemoTcpHttpd {extends TcpHttpd extends Tcl2Html} \
+{
+  # "Default backend process routine for .thtml files"
+  # --------------------------------------------------
+  public mime {EXT CLIENT_ID} \
+  {
+   # upload in server context client object
+   upvar #0 $CLIENT_ID CLIENT
+   global PAGE
+   set    PAGE ""
+
+   if {$EXT == ".pkg"} {
+    global JTCL_FILE
+     set PKG_LABEL [file tail [file rootname $CLIENT(url)]]
+
+     # retreive filepath from jTcl register
+     if [catch {open $JTCL_FILE($PKG_LABEL)} FILE] {
+        return [$MY error 404 $CLIENT(url) "Invalid package file $CLIENT(url)"]
+     }
+
+     # protect ourself from parsing parser (it fail!!)
+     if [catch {
+
+       # place all date in data instance var before calling tcl2html
+       set THIS(data) [read -nonewline $FILE]
+       close $FILE
+       $CLASS(tcl2html) $MY $PKG_LABEL
+     } ERR] {
+       return [$MY error 400 $CLIENT(url) "Can't translate $PKG_LABEL in HTML (sorry!)<p><p> $ERR"]
+     }
+
+     # normal return
+     return [list HTML $PAGE]
+
+   } ;# end .pkg
+
+   if {$EXT == ".htcl"} \
+   {
+     # At this point we are facing a valid extention for our class
+     set FILE [$CLASS(openUrl) $MY $CLIENT(url)]
+
+     if {[lindex $FILE 0] == "ERROR"} \
+      {return [$MY error 404 $CLIENT(url) "Invalid filename [lindex $FILE 1]"]}
+
+     lappend PAGE "HTTP/1.0 200 Data follows"
+     lappend PAGE "Date: [$CLASS(date) $MY [clock clicks]]"
+     lappend PAGE "Last-Modified: [$CLASS(date) $MY 0]"
+     lappend PAGE "Content-Type: text/html"
+     lappend PAGE ""
+
+     lappend PAGE "<html>"
+     lappend PAGE "<body bgcolor=#ffffff>"
+
+     # Effectively process .thtml file
+     set BUF [read [lindex $FILE 0] 9999]
+     if {[catch $BUF RETURN]} \
+       {return [$CLASS(error) $MY 404 $CLIENT(url) "evaluating tcl $RETURN"]}
+
+     lappend PAGE "</html>"
+
+     # free file descriptor
+     close [lindex $FILE 0]
+
+     return [list HTML $PAGE]
+   } ;# end of htcl
+
+   # If this extention is unknow to us pass it to ou super class
+   return [TcpHttpd.mime $MY $EXT $CLIENT_ID]
+
+  } ;# "end mime"
+
+  DemoTcpHttpd {PORT} \
+  {
+    global env
+
+    # Take either development or runtime version
+    set ROOT_DIR    [jClassName {demo.web.root.*}]
+
+    set THIS(index) Html/index.html
+
+    TcpHttpd.TcpHttpd $MY $PORT $ROOT_DIR
+  }
+
+} ;# "end class DemoTcpHttpd"
+
+# "httpd example"
+# --------------
+proc demo.web.httpd.start {{PORT 1234}} \
+{
+  global SV_VWAIT
+  global tk_library
+
+  # create a new httpd and set some minimum methode
+  set SERVER_ID  [new DemoTcpHttpd $PORT]
+
+  # in tk we use waiting loop
+  if [info exists tk_library] {return $SERVER_ID}
+
+  $SERVER_ID dump
+
+  puts "Wait for Brooser connection http://localhost:$PORT/"
+  $SERVER_ID vwait
+  free $SERVER_ID
+
+} ;# end demo.httpd.start
+
+if {![info exists DEMO_IT]} {eval demo.web.httpd.start [lindex $argv 1]}

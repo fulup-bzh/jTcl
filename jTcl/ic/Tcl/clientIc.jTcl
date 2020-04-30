@@ -1,0 +1,154 @@
+#  $Header: /Master/jTcl/jTcl/ic/Tcl/clientIc.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $
+#
+#       Copyright(c) 96-97 Fridu a Free Software Company
+#
+# File      :   clientIc.tcl base class for ic rules client
+# Projet    : 	Fridu a Realtime Booster
+# SubModule :   icRule binding
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/ic/Tcl/clientIc.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01d,11nov97,fulup adapted to new dispatch strategy
+# 01c,19may97,fulup adapted to new object jIc engine
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+#
+#
+
+jClassImport {tcp.channel*}
+
+class IcClient {extends TcpChannel} \
+{
+  # "Asynchronousely read answer and send then to disptacher"
+  # ---------------------------------------------------------
+  public read {}
+  {
+     if {[eof $THIS(in)]} \
+     {
+       free $MY
+       return
+     }
+
+     # "read answer and split RULE name and data"
+     set ANSWER [gets $THIS(in)]
+
+     # "check answer is complete"
+     if {[llength $ANSWER] != 1} \
+     {
+         # We are facing a global error Display it
+         set THIS(error) "Incompleted answer $ANSWER"
+         set THIS(status)  FX
+         $THIS(errorId) add $MY
+     }
+
+     foreach SLOT [lindex $ANSWER 0] \
+     {
+       set RULE  [lindex $SLOT 0]
+       set FRAME [lrange $SLOT 1 end]
+
+       debug.msg $RULE $FRAME
+
+       # "If message cannot be dispatch add it to error Box"
+       if {![info exists THIS(_RL_$RULE)]} \
+       {
+         # We are facing a global error Display it
+         set THIS(error) "No Binding $SLOT"
+         set THIS(status)  FX
+         $THIS(errorId) add $MY
+       } else {
+         # "Send data to all widget register for this rule"
+         foreach JTK_WD $THIS(_RL_$RULE) \
+         {
+           $JTK_WD update $FRAME
+         }
+       }
+      }
+
+      # "before leaving updisplay error if any"
+      $THIS(errorId) current
+  } ;# "end read"
+
+  # "We need a dummy focus method for error widget"
+  # -----------------------------------------------
+  public focus {} {}
+
+  # "Send a question but don't wait for answer"
+  # -------------------------------------------
+  public send {ACTION RULE args}
+  {
+    # "Send data to all widget register for this rule"
+    puts  $THIS(out) [concat icEngine $ACTION $RULE $args]
+    flush $THIS(out)
+
+  } ;# "end send"
+
+   # "Send a Question and wait for answer"
+  # -------------------------------------
+  public query {ACTION QUESTION}
+  {
+    $CLASS(send) $MY $ACTION $QUESTION
+    return [gets $THIS(in)]
+
+  } ;# "end query"
+
+  # "store JTK_WD/RULE couple in a hash table for dispatching"
+  # ----------------------------------------------------------
+  public register {JTK_WD RULE}
+  {
+    # "note that one rule can be connected to more that one wodget"
+    lappend THIS(_RL_$RULE) $JTK_WD
+  }
+
+  # "Send a message on GUI when icServer dies"
+  # ------------------------------------------
+  free {}
+  {
+     $THIS(errorId) display Error \
+       "ERROR: Lost connection with $THIS(host) icRules server"
+  }
+
+
+  # "Constructor pass language to rules server  get RID/CID"
+  # --------------------------------------------------------
+  IcClient {ERROR_ID HOST PORT}\
+  {
+    global env
+    global argv
+
+    set THIS(errorId) $ERROR_ID
+
+    # "Wait until icServer it reponsing"
+    while [catch {socket $HOST $PORT} SOCK] \
+    {
+       $THIS(errorId) display Error "icServer//$HOST:$PORT $SOCK"
+       update
+       after 1000
+    }
+
+    # "Save host name for some error messages"
+    set THIS(host) $HOST
+
+    # "Call our super class for connecting onto the server"
+    $SUPER $MY $SOCK
+
+    # "depending on starting param we ask for a private machine or not"
+    if {$argv == ""} {set argv NoSlaveInterp}
+    puts  $THIS(out) "icClient $argv"
+    flush $THIS(out)
+
+    # pass our local lang to our rules engine
+    if [info exists env(LANG)] \
+    {
+      puts  $THIS(out) "icEngine valid lang $env(LANG)"
+      flush $THIS(out)
+    }
+  } ;# "end Constructor"
+}

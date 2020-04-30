@@ -1,0 +1,182 @@
+<HTML>
+<HEAD>
+<SCRIPT>
+//---------------------------------------------------
+// Application 	: dselect.htm
+// Fichier 	: select.htm
+// Auteur 	: JM Inglebert - IUT de Vannes
+// Mail 	: Jean-Michel.Inglebert@iu-vannes.fr
+//---------------------------------------------------
+
+var debug = false
+
+//=============
+// UTILITAIRES
+//=============
+
+function afficheTab(tab)
+// tab : tableau à afficher
+// --
+// Affiche tous les éléments du tableau tab
+// dans la fenêtre courante
+// --
+{
+  for (var i = 0; i < tab.length; i++)  
+   {
+    document.write(tab[i],"-")
+   }
+  document.write("<BR>")
+}
+
+//=================================
+// DONNEES et PROCEDURES LOCALES
+//=================================
+
+// les items de l'élément select
+tabItems = new Array("client","Ville1","Ville2")
+
+if (debug) {afficheTab(tabItems)}
+
+// les noms des boutons
+tabButtons = new Array("button1","button2")
+// et leurs proc de réaction
+tabFButtons = new Array("alert","confirm")
+
+function fClientl1(form)
+// form : form contenant le bouton déclenchant
+// --
+// Affiche le nombre d'éléments de la forme courante
+// --
+{
+ alert("j'ai " + form.length + " éléments")
+}
+
+function fClientl2(form)
+// form : form contenant le bouton déclenchant
+// --
+// Affiche l'url courante
+// --
+{
+ alert("url client = " + document.location )
+}
+
+//============================================================
+// PROCEDURES DE CONSTRUCTION/MAJ DE L'INTERFACE CLIENT
+//============================================================
+
+function doSelect(tab,name,isel){
+// tab  # tableau des noms des items de la liste
+// name # nom de l'élément SELECT
+// isel # indice de l'élément pré-sélectionné -- A FAIRE --
+
+// --
+// Construit un élément de type SELECT
+// où les items sont les éléments du tableau tab
+// --
+
+ document.write("<SELECT NAME=",name," MULTIPLE>")
+ for (var i = 0; i<tab.length ; i++){
+  document.write("<OPTION> ", tab[i])
+ }
+ document.write("</SELECT>")
+}
+
+function doButtons(tab,tabf){
+// tab   # tableau des noms des boutons
+// tabf  # tableau des noms des procédures de réaction
+
+// --
+// Construit autant de boutons qu'il existe
+// d'éléments dans le tableau tab et leur
+// associe la procédure correspondante dans tabf
+// qui sera appelée avec la forme englobante
+// --
+
+ for (var i = 0; i<tab.length ; i++){
+  document.write("<INPUT TYPE='button' VALUE='", tab[i])
+  document.write("' onClick='",tabf[i],"(this.form)'>")
+ }
+}
+
+function majButtons(tab){
+// tab   # tableau des noms des boutons
+
+// --
+// Modifie les noms des boutons de la form F0
+// par les éléments du tableau tab
+// --
+
+ for (var i = 0; i<tab.length ; i++){
+  top.frames[0].document.F0.elements[i].value=tab[i]
+ }
+}
+
+
+function reload(){
+// --
+// Recharge le fichier courant (le client)
+// --
+
+ parent.frames[0].location=parent.frames[0].location
+}
+
+function nextDataUrl(){
+// --
+// Charge le prochain fichier de données
+// dont le nom est dans la variable nextDatas
+// --
+
+ parent.frames[1].location=parent.frames[1].nextDatas
+}
+</SCRIPT>
+
+
+</HEAD>
+
+<BODY>
+<H1> Commandes de test </H1>
+ <FORM>
+  <INPUT TYPE="button" VALUE="majDatas"
+   onClick="nextDataUrl()">
+  <INPUT TYPE="button" VALUE="reload Client"
+   onClick="reload()">
+  <INPUT TYPE="button" VALUE="maj boutons sans reload"
+   onClick="majButtons(tabButtons)"><BR>
+ </FORM>
+
+<H1> Interface Client Dynamique </H1>
+L'interface est construite à partir de données locales
+et à partir de données récupérées via l'url de la frame
+de bas de page.<BR>
+Les noms des boutons et leur procédure de réaction
+sont dynamiquement modifiées, seul les noms sont
+modifiés pour les items de listes.
+
+<SCRIPT>
+//==============================
+// CREATION DE L'INTERFACE
+//==============================
+
+ document.write("<FORM NAME='F0'>")
+  doButtons(top.frames[1].tabButtons,top.frames[1].tabFButtons,"x")
+  document.write("<BR>")
+  doButtons(tabButtons,tabFButtons,"x")
+ document.write("</FORM>")
+
+ if (debug) {afficheTab(top.frames[0].tabItems)}
+ if (debug) {afficheTab(top.frames[1].tabItems)}
+
+ document.write("<FORM NAME='F1'>")
+  doSelect(top.frames[1].tabItems,"url")
+  doSelect(tabItems,"local")
+  // sélectionne un item
+  document.F1.url.options[1].selected=true
+  document.F1.local.options[2].selected=true
+ document.write("</FORM>")
+
+ document.write(parent.frames[0].location,"<BR>")
+</SCRIPT>
+
+</BODY>
+</HTML>
+

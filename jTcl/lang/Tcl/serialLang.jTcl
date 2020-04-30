@@ -1,0 +1,120 @@
+#  Copyright(c) 1996-97 FRIDU a Free Software Company (fridu@fridu.bzh)
+#
+# File      :   serialLang.tcl implement persistance on TCL Object
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   jTcl Etc
+# Auteur    :   Fulup Ar Foll [fulup@fridu.bzh]
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:19 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/lang/Tcl/serialLang.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01a,22oct97,fulup written
+#
+
+# Declare packade dependencies
+# -----------------------------
+ jClassImport {lang.object.*}
+
+# Store object variables instances as well as all
+# agregated boject in object
+# ----------------------------------------------
+proc jSerialStore {OBJ FILENAME {FD ""}} \
+{
+  global _STORED
+
+  # upload object in our context
+  upvar #0 $OBJ THIS
+
+  # start a new store file
+  if {$FD == ""} \
+  {
+    set FD [open $FILENAME w]
+    puts $FD "@@ROOT@@ $OBJ"
+  }
+
+  # Declare object as beeing stored and start saving in file"
+  set _STORED($OBJ) 1
+  puts $FD "\n@@OBJ@@ $OBJ"
+
+  # Fist we save object onto disk
+  foreach SLOT [array names THIS] \
+  {
+     puts $FD "[list $SLOT] [list $THIS($SLOT)]"
+  }
+
+  # Look again in side object in order to find agregated object
+  foreach SLOT [array names THIS] \
+  {
+     # avoid looping forever on ourself
+     if {$SLOT != "my"} \
+     {
+       # IF agregate is an object that have not already been store
+       upvar #0 $THIS($SLOT) AGREGATE
+       if {([info exist AGREGATE(class)]) \
+           && (![info exists _STORED($THIS($SLOT))])} \
+       {
+          # "effectively store object"
+          jSerialStore $THIS($SLOT) {} $FD
+       }
+     }
+  }
+
+  # if we are facing root object end write end tag
+  if {$FILENAME != ""} \
+  {
+     unset  _STORED
+     puts  $FD "\n@@END@@"
+     close $FD
+  }
+
+} ;# end jStore
+
+# Load all object from a file and return
+# main father object handle
+# ---------------------------------------
+proc jSerialLoad {FILENAME} \
+{
+  set FD [open $FILENAME]
+
+  # "loop on all save values"
+  while {![eof $FD]} \
+  {
+     # get line and process all non empty line
+     set LINE [gets $FD]
+     if {$LINE != ""} \
+     {
+       # process line depending on first word
+       set KEY   [lindex $LINE 0]
+       set VALUE [lindex $LINE 1]
+       switch -- $KEY \
+       {
+
+         {@@ROOT@@} { ;# This is root object name
+            set ROOT $VALUE
+         }
+         {@@OBJ@@}  { ;# We are facing a new object
+            upvar #0 $VALUE OBJECT
+            # create a new command with oject name
+            proc $VALUE {METHOD args}  \
+            "
+              return \[lang.object.call $VALUE \$METHOD \$args\]
+            " ;# end object command
+         }
+         {@@END@@}  { ;# this logical end of file
+            return $ROOT
+         }
+         {default}  { ;# in all other case we just fill up current object
+            set OBJECT($KEY) $VALUE
+         }
+       } ;# end switch
+     }
+  }
+  # If logical en dfounded we should not get out this way
+  error "Did not found logical end for jSerialLoad file"
+} ;# end jLoad

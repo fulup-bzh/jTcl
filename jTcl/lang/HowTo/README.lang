@@ -1,0 +1,68 @@
+WARNING: Installation and demo readme are located in Docs/Demo directory
+
+
+Note on Java like syntaxe
+-------------------------
+
+1 There is no interface, but an Object can inherite from more than one Class
+
+2 Object and class are save in TCL array, they is one array for each object
+  that keep track of this object instances, this object is linked to a class
+  array that keep track of all inherited Class, for performances raison
+  all classes caracteristics are gouped in object class at start up time.
+
+3 Du to Tcl lack of typing jTcl as no polymorphism, nevertheless variable
+  arguments are working as under convertionnal TCL. 
+
+Warning: In order beeing as close as possible of Java syntaxe, files
+  within this directory does not follow Fridu name convention
+
+Internal organization
+=====================
+
+Each method is translated in a TCL proc with the following name
+---------------------------------------------------------------
+   Class.Methode
+
+Each method is added two variables
+----------------------------------
+   $MY    object instance array
+   $CLASS user asked class for current object.
+
+Private constructor are added SUPER variable
+--------------------------------------------
+   SUPER variable point to super class constructor, when an object
+   use multi-inheritancy $SUPER is a TCL LIST. Foloing syntaxe can
+   be used for calling super class constructor when needed.
+
+   $SUPER $MY Param-1....Param-n
+
+Instance and Class variables
+-----------------------------
+   jTcl support both
+   + static variables are added to $CLASS array
+   + set variable are use to build an object init method called
+     $CLASS.new that dont received any parameter and that is
+     called automaticaly a new time. 
+
+   Note that at "new" time jTcl call first all $CLASS.new method starting
+   from the most indeep class [final class] to user asked class. When all
+   $CLASS.new methods have been called jTcl call user optional constructor
+   $METHOD.$METHOD, this method can itself call other class optionnal
+   method thru the $SUPER variables, note that optionnal Class constructor
+   are called in reverse order compare with default $Class.new method.
+
+Freeing
+-------
+   Free of an object ID call all inheritated $CLASS.free method from user
+   class to most inner class [final Class]. $Class.free is not madatory
+ 
+Debug
+--------
+   jTcl provided a method trace facility, when seting JTCL_DEBUG enviroment
+   or global variable, a debug line is included before each method body.
+   Note: this debug line is included dynamicaly at parsing time, also
+   setting JTCL_DEBUG variable after class sourcing is useless.
+   Ex: setting "setenv JTCL_DEBUG='*ic*'" will print trace for all named methods
+   fiting with this regular expresion. This facility can also be use for conversionnal
+   procedure by replacing "proc" by "debug.proc" at creation time.

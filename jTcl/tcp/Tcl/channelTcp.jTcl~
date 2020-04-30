@@ -1,0 +1,147 @@
+# $Header: /Master/jTcl/jTcl/tcp/Tcl/channelTcp.jTcl,v 1.2 1999/03/08 08:34:19 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   channelTcl.tcl Generic virtual channel class
+# Projet    :   Fridu a Realtime Booster
+# SubModule :   TCP/Tcl network class
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:19 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/tcp/Tcl/channelTcp.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01g,20jan98,fulup flush channel before free
+# 01f,13jan98,fulup closed both channel
+# 01e,23apr97,fulup move write to be event driven
+# 01d,19mar97,fulup change write parameters in order sending empty line
+# 01c,11mar97,fulup remove vwait
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+#
+
+# Test verison for event facilities
+# ----------------------------------
+if {![info exists embed_args]} \
+{
+  if {$tcl_version < 7.0} \
+  {
+    puts "ERROR: jTcl netwotk class can't work with less than tcl-7.5 your is $tcl_version/$tcl_patchLevel"
+    exit
+  }
+  switch -glob -- $tcl_patchLevel \
+  {
+    {8.0a*} -
+    {7.*} { # Emulated fcopy fonctionnality
+            proc fcopy {IN OUT dummy CALLBACK} {
+               fconfigure $OUT -blocking 1
+               unsupported0 $IN $OUT
+               uplevel #0 $CALLBACK 1
+            }
+          }
+  }
+} ;# end tcl_version < 7.0
+
+jClassImport {lang.object.*}
+
+class TcpChannel {extends Object} \
+{
+ static blocking 1            # "Start channel in blocking mode"
+ static translation auto      # "Start in binary mode"
+ set buffer  {}               # "Incomming packet buffer"
+ set bufOut  {}               # "outgoing waiting buffer"
+
+  # "effectively send a slot from buffer onto TCP layer"
+  # ---------------------------------------------------
+  public writeAndFlush {{BUFFER "\000"}}
+  {
+    if [catch {
+      if {$BUFFER == "\000"} \
+      {
+        # In asynchronous mode when buffer is empty & EOF set free channel
+        if {[llength $THIS(bufOut)] == 0} \
+        {
+          fileevent  $THIS(out) writable {}
+          if {$THIS(errno) == "EOF"} {free $MY}
+          return
+        }
+
+        puts  $THIS(out)   [lindex  $THIS(bufOut) 0]
+        flush $THIS(out)
+        set   THIS(bufOut) [lrange $THIS(bufOut) 1 end]
+
+      } else {
+        puts  $THIS(out)  $BUFFER
+        flush $THIS(out)
+      }
+    } ERR] {
+      $CLASS(signal) $MY $ERR
+    }
+  }
+
+  # "default channel writing proc"
+  # ------------------------------
+  public write {BUFFER}
+  {
+    lappend THIS(bufOut) $BUFFER
+    fileevent  $THIS(out) writable [list $CLASS(writeAndFlush) $MY]
+  } ;# "end write"
+
+  # "default read procedure"
+  # -----------------------
+  public read {}
+  {
+    lappend THIS(buffer) [gets $THIS(in)]
+
+    # on channel send exception to main loop & free resource
+    if {[eof $THIS(in)]} \
+    {
+      fileevent  $THIS(in) readable {}
+      set THIS(errno)  EOF
+    }
+  } ;# "end read"
+
+  # "Destructor close output channel and release objet ram"
+  # -------------------------------------------------------
+  free {}
+  {
+    # before freeing send remainning data from buffer
+    while {[llength $THIS(bufOut)] >0} {
+     $CLASS(writeAndFlush) $MY
+    }
+    # close socket and remove it from clientList and ignore error
+    catch {
+     close $THIS(in)
+     close $THIS(out)
+    }
+
+  } ;# "end free"
+
+  # "Constructor for a new virtual channel"
+  # ---------------------------------------
+  TcpChannel {SOCK_IN {SOCK_OUT {}}}
+  {
+    if {$SOCK_OUT  == {}} \
+    {
+      set SOCK_OUT $SOCK_IN
+    }
+
+    # Create TcpChannel as an object extention
+    set THIS(in)         $SOCK_IN
+    set THIS(out)        $SOCK_OUT
+
+    # It look like TCL is bugged in non blocking mode
+    fconfigure $THIS(out) -translation $CLASS(translation) -blocking $CLASS(blocking)
+
+    # bind event to channel or inherited read method note than as in order to pass
+    # to TCL interpretor read method we have to know about internal representation
+    # this is not realy nice, but I did not found any nice and fast way of doing it
+    fileevent  $SOCK_IN readable [list $CLASS(read) $MY]
+
+  } ;# "end constructor"
+} ;# "end Class TcpChannel"

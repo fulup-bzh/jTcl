@@ -1,0 +1,123 @@
+# $Header: /Master/jTcl/zDemo/Tcp/server/Tcl/echoTcpDemo.jTcl,v 1.2 1999/03/08 08:34:21 fulup Exp $
+#
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   echoTcpDemo.tcl Simple server echo
+# Projet    :   jTcl-Demo
+# SubModule :   Tcp/server
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:21 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/zDemo/Tcp/server/Tcl/echoTcpDemo.jTcl,v $
+#      State       : $State: Exp $
+#
+# Modification History
+# --------------------
+# 01c,01dec97,fulup adapted to jTcl 3.x
+# 01b,28feb97,fulup released jTcl
+# 01a,20sep97,fulup written
+#
+
+#--------------------------------------------------------------------
+# This program is a TCP server it wait for command on a TCP socket
+# and echo everything back on socket. In order to test it use
+# telnet localhost 1234  or with demo:client 1234 where 1234=TCPport
+#
+# This demo use a derivate class from Channel for each incomming client
+# this derivated class is pass at server constructor method, that will
+# use it to create a new Channel for each new Client
+#--------------------------------------------------------------------
+
+# import needed class
+# -------------------------
+package require jTcl
+jClassImport {tcp.server.*}
+
+# "Create an echo super Channel Class for echoing incomming Clients"
+# -----------------------------------------------------------------
+class DemoEchoCl {extends TcpServerCl}\
+{
+  # "This routine echo characteris on server channel"
+  # -------------------------------------------------
+  public read {} \
+  {
+   # Read one line from remote server
+   set LINE [gets $THIS(in)]
+
+   $CLASS(log) $MY $LINE
+
+   # If Eof subcontract server method for handling execption
+   if {[eof $THIS(in)]} \
+   {
+      # Using call in place of $MY is faster
+      set THIS(error) EOF
+      free   $MY
+      return
+   }
+
+   # Rewrite on Channel socket using object method
+   $MY writeAndFlush "echo->$LINE"
+  } ;# "end read"
+
+  # "Constructor is called at accept time it can be used"
+  # "For any authentification method of clients or accounting"
+  DemoEchoCl {SERVER_ID HOST SOCK PORT} \
+  {
+    # Client constructor also need this parameters
+    $SUPER $MY $SERVER_ID $HOST $SOCK $PORT
+  }
+
+} ;# "end class DemoEchoCl"
+
+# "Define out server echo class"
+# ------------------------------
+class DemoTcpEcho {extends TcpServer} \
+{
+ # "override server client class"
+ static clientsClass DemoEchoCl
+
+ DemoTcpEcho {PORT}
+ {
+   $SUPER $MY $PORT
+ }
+} ;# "end DemoTcpEcho"
+
+# "server example"
+# ----------------
+proc demo.tcp.echoSv.start {{PORT 1234}} \
+{
+  global SV_VWAIT
+  global tk_library
+
+  # create a new server and set some minimum methode
+  set SERVER_ID [new DemoTcpEcho $PORT]
+
+  # in tk we use waiting loop
+  if [info exists tk_library] {return $SERVER_ID}
+
+  # Set Client min to one in order leaving when no client
+  $SERVER_ID set clientsMin 1
+  $SERVER_ID set clientsMax 2
+
+  # Check our server slots
+  $SERVER_ID dump
+
+  # loop forever on event dispaching
+  puts "Echo server waiting for connection \[use telnet localhost $PORT\] to test it"
+  $SERVER_ID vwait
+
+  free $SERVER_ID
+
+} ;# "end demo.server.start"
+
+if {![info exists DEMO_IT]}  {eval demo.tcp.echoSv.start [lindex $argv 0]}
+
+
+
+
+
+
+

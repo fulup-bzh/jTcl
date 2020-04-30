@@ -1,0 +1,665 @@
+# $Header: /Master/jTcl/jTcl/lang/Tcl/objectLang.jTcl,v 1.2 1999/03/08 08:34:18 fulup Exp $ #
+#  Copyright(c) 1996-97 FRIDU a Free Software Company
+#
+# File      :   objectCore.tcl Java Class Systaxe
+# Projet    :   Fridu a Realtime Booster
+# Module    :   core generic Object-test-debug facilities
+# Auteur    :   Fulup Ar Foll (fulup@iu-vannes.fr)
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/lang/Tcl/objectLang.jTcl,v $
+#      State       : $State: Exp $
+#
+#  Modification History
+#  --------------------
+#  01p,02apr98,fulup improved signal strategy for C++ object
+#  01o,15mar98,fulup added JavaDoc comment and -extact to parse switch
+#  01n,27feb98,fulup replaced command with proc in new for c++
+#  01m,11feb98,fulup moved in ldelete from debugLang.jTcl cleanup constructor/desctuctor parsing
+#  01n,29jan98,fulup import debug package only if needed add dump in signal
+#  01m,13jan98,fulup set set/get for object var and move constructor public complete signal
+#  01l,01dec97,fulup corrected extents spelling error
+#  01k,18jun97,fulup make value mandatory for set and static values
+#  01i,30may97,fulup removed double in extent list in mutliclass extends mode
+#  01h,27may97,fulup change comment parsing
+#  01g,15may97,fulup sort dump & place effective class name in CLASS(my) for ic rule engine
+#  01h,05may97,fulup removed command attached to object when freeing object
+#  01g,28apr97,fulup Add _O _C prefix in Class and Object Handle & create per class counter
+#  01f,17apr97,fulup Add comment inside parameters and extends for jDoc
+#  01e,27mar97,fulup remove catch from method call
+#  01d,16mar97,fulup apply Luc rewiew recomendation
+#  01c,10mar97,fulup change comment in order to be protected for keywords
+#  01b,27feb97,fulup removed polyporphism
+#  01a,05feb97,fulup written
+#
+
+# --------------------------------------------------------------
+# Handle basic object management. Contains Java like parser
+# and basic object definition
+# --------------------------------------------------------------
+
+# Example : $JTCL/demo/Tcl/jTclDemo.tcl  A simple Tcp server using two classes
+
+# Include cTcl debug routines if needed
+# -------------------------------------
+if [info exist env(JTCL_DEBUG)] {
+   jClassImport {lang.debug*}
+ }
+
+# jTcl global array for various data
+set _JTCL(classes) {}
+
+# if _JTCL(log) is set in ENV we take it else we
+# --------------------------------------------
+if {![info exist env(JTCL_LOG)]} \
+{
+   set env(JTCL_LOG) 0
+}
+
+# create and ldelete |delete element by value in a list|
+# -------------------------------------------------------
+proc ldelete { list value} \
+{
+  set ix [lsearch -exact $list $value]
+  if {$ix >= 0}\
+  {
+    return [lreplace $list $ix $ix]
+  } else {
+    return $list
+  }
+} ;# end ldelete
+
+
+# remove jTcl comment from list
+# ------------------------------
+proc removeComment {
+ PARAMS
+ } {
+  # no params don't process
+  if {$PARAMS == ""}     {return ""}
+
+  # remove everything that start with a #
+  set IND 0
+  set RES {}
+  while {1} \
+  {
+    set SLOT [lindex $PARAMS $IND]
+    if {$SLOT == {}}  {break}
+    if {(($SLOT == {#}) || ($SLOT == {;#}))} \
+    {
+      incr IND +2
+    }  else {
+      lappend RES $SLOT
+      incr IND
+    }
+  }
+  return $RES
+} ;# end removeComment
+
+# Init object instance call before any new action
+# -----------------------------------------------
+proc   lang.object.new {MY CLASS_ID} \
+{
+  upvar #0 $MY THIS
+  upvar #0 _C_$CLASS_ID CLASS
+
+  # Get down in object hierarchie and free all sub-instances
+  # Note we from final class to last newed class
+  for {set IND [expr [llength $CLASS(extends)] -1]} {$IND >= 0} {incr IND -1}\
+  { ;#  check proc exist before calling it
+    set SLOT [lindex $CLASS(extends) $IND]
+    if {[info command $SLOT.new] != {}} \
+    {
+       $SLOT.new $MY
+    }
+  }
+} ;# end   lang.object.new
+
+# Destructor loop in hierarchie and free everyting
+# ------------------------------------------------
+proc   lang.object.free {MY} \
+{
+  upvar #0 $MY THIS
+  upvar #0 $THIS(class) CLASS
+
+  # Get down in object hierarchie and free all sub-instances
+  foreach SLOT  $CLASS(extends) \
+  { ;#  check proc exist before calling it
+    if {[info command $SLOT.free] != {}} \
+    {
+       $SLOT.free $MY
+    }
+  }
+
+  # remove object and attached proc reference from list
+  unset  THIS
+  rename $MY {}
+  debug.msg free $MY done
+} ;# end   free
+
+# Call a method
+# --------------
+proc lang.object.call {MY METHOD PARAMS} \
+{
+  global env
+  upvar #0 $MY THIS
+  upvar #0 $THIS(class) CLASS
+
+  if {![info exists CLASS($METHOD)]} \
+  {
+    if [info exist CLASS(signal)] {
+      $CLASS(signal) $MY "ERROR. Can't find |$METHOD| method in $CLASS(my).$MY"
+    } else {
+      return -code error "lang.object.call $MY $CLASS(my) invalid \[$METHOD\]  Not found"
+    }
+  }
+
+  # effectively exec method
+  return [eval $CLASS($METHOD) $MY $PARAMS]
+
+} ;# end   lang.object.call
+
+# Extents Class with heritated class slot
+# ---------------------------------------
+proc lang.object.extends {ERR_LVL CLASS_ID EXT} \
+{
+ upvar #0 _C_$CLASS_ID CLASS
+
+ # Store Super class for Constructor
+ for {set IND 0} {$IND < [llength $EXT]} {} \
+ {
+   # if extends keyword found add class name in our super class dependencies list
+   set SLOT [lindex $EXT $IND]
+   if {$SLOT == "extends"} \
+   {
+     incr IND
+     # Don't add class in extent list if already present
+     if {[lsearch -exact  $CLASS(super) [lindex $EXT $IND]] == -1} \
+     {
+        lappend CLASS(super)  [lindex $EXT $IND]
+     }
+     incr IND
+   } else {
+     # ignore comment and stop on any unknow word
+     if [string match {#*} "$SLOT"]  \
+     {
+       incr IND +2
+     } else {
+       error "ERROR: when parsing extends |$CLASS_ID| token=|$SLOT|"
+     }
+   }
+ } ;# end for
+
+ # For include all heritate class in our current object
+ foreach SUP $CLASS(super) \
+ {
+   upvar #0 _C_$SUP SUP_CLASS
+
+   # Check user try inherit a Valid Class
+   if {![info exists SUP_CLASS(extends)]} \
+    {
+      error $ERR_LVL "Parsing error unknow subclass \[$SUP\] can't extends $CLASS_ID"
+    }
+
+   # Update extention list for Constructor ans destructor methods
+   set CLASS(extends) [concat $CLASS(extends) $SUP_CLASS(extends)]
+
+   # For each inheritated class we take all this that as not been overrided
+   foreach SLOT [array names SUP_CLASS] \
+   {
+      if {! [info exists CLASS($SLOT)]} \
+      {
+         set CLASS($SLOT) $SUP_CLASS($SLOT)
+      }
+   }
+ }
+} ;# end lang.object.extends
+
+# Parse Class cor in order creating methods
+# -----------------------------------------
+proc lang.object.parse {ERR_LVL CLASS_ID CORE} \
+{
+ upvar #0 _C_$CLASS_ID CLASS
+
+  # Default is no new proc
+  set INIT {}
+
+  # Loop on all aggument in order parsing them
+  for {set IND 0} {$IND < [llength $CORE]} {incr IND +1} \
+  {
+    switch -exact -- [lindex $CORE $IND]  \
+    {
+      set {
+        # Set this as instent variable all var are collected for building a new proc
+        incr IND +1; set VAR   [lindex $CORE $IND]
+        incr IND +1; set VALUE [lindex $CORE $IND]
+        debug.msg set $VAR $VALUE
+        # $VALUE must be protected because affectation is effectively done in $CLASS.new proc
+        lappend INIT "set THIS($VAR) \"$VALUE\""
+      }
+
+      static {
+        # Set this as a class variable inside Class Array
+        incr IND +1; set VAR   [lindex $CORE $IND]
+        incr IND +1; set VALUE [lindex $CORE $IND]
+        debug.msg static $VAR $VALUE
+        set CLASS($VAR) $VALUE
+       }
+
+      free {
+         # Build destructor
+         incr IND; set ARGS   [removeComment [lindex $CORE $IND]]
+         incr IND; set INST   [lindex $CORE $IND]
+
+         debug.msg Destructor $CLASS_ID $ARGS
+
+         debug.proc $CLASS_ID.free [concat MY $ARGS] \
+          "upvar #0 \$MY THIS
+           upvar #0 \$THIS(class) CLASS
+           $INST
+          "
+      }
+
+      private {
+        # Create proc without storing in object MY
+        incr IND +1; set METHOD [lindex $CORE $IND]
+        incr IND +1; set ARGS   [removeComment [lindex $CORE $IND]]
+        incr IND +1; set INST   [lindex $CORE $IND]
+
+       if {($METHOD == "free") || ($METHOD == $CLASS_ID)} {
+            puts "WARNING: |$CLASS_ID.$METHOD| Constructor/Destructor private  prefix ignored"
+            incr IND -3
+            continue
+        }
+
+        debug.msg private $METHOD $ARGS
+
+        # Compute super Class methods list
+        set SUPERS {}
+        foreach SUPER $CLASS(super) {lappend SUPERS "$SUPER.$METHOD"}
+
+      debug.proc $CLASS_ID.$METHOD [concat MY $ARGS] \
+        "upvar #0 \$MY THIS
+         upvar #0 \$THIS(class)  CLASS
+         set SUPER  \{$SUPERS\}
+         $INST
+           "
+        }
+
+      public {
+         # Create proc & store un object MY
+         incr IND; set METHOD [lindex $CORE $IND]
+         incr IND; set ARGS   [removeComment [lindex $CORE $IND]]
+         incr IND; set INST   [lindex $CORE $IND]
+
+	if {($METHOD == "free") || ($METHOD == $CLASS_ID)} {
+             puts "WARNING: |$CLASS_ID.$METHOD|  Constructor/Destructor public prefix ignored"
+             incr IND -3
+             continue
+         }
+
+         debug.msg public $METHOD $ARGS
+
+         set  CLASS($METHOD) $CLASS_ID.$METHOD
+
+        # Compute super Class methods list
+        set SUPERS {}
+        foreach SUPER $CLASS(super) {lappend SUPERS "$SUPER.$METHOD"}
+
+         debug.proc $CLASS_ID.$METHOD [concat MY $ARGS] \
+          "upvar #0 \$MY THIS
+           upvar #0 \$THIS(class) CLASS
+           set SUPER \{$SUPERS\}
+           $INST
+          "
+       }
+       {##} -
+       {;#} -
+       {#}  {
+         # remove TCl comment (one block after one #)
+         incr IND
+       }
+       default {
+           # If Not a constructor it is an error
+	   if {[lindex $CORE $IND] == $CLASS_ID } {
+           incr IND; set ARGS   [removeComment [lindex $CORE $IND]]
+           incr IND; set INST   [lindex $CORE $IND]
+
+           debug.msg Constructor $CLASS_ID $ARGS
+
+           # Compute super Class methods list
+           set SUPERS {}
+           foreach SUPER $CLASS(super) {
+             lappend SUPERS "$SUPER.$SUPER"
+	   }
+
+           debug.proc $CLASS_ID.$CLASS_ID [concat MY $ARGS] \
+            "upvar #0 \$MY THIS
+             upvar #0 \$THIS(class) CLASS
+             set SUPER \{$SUPERS\}
+              $INST
+            "
+            # Build Constructor
+          } else {
+            error $ERR_LVL "ERROR: parsing $CLASS_ID |[lindex $CORE $IND]| [lrange $CORE $IND [expr $IND + 4]]"
+          }
+       }
+    } ;# end switch
+  } ;# end for
+
+ # Is we have to init Object create proc
+ if {$INIT != {}} \
+ {
+   # Create New proc from collected Var line
+   debug.proc $CLASS_ID.new MY [join [linsert $INIT 0 "upvar #0 \$MY THIS;global env"] ";"]
+ }
+} ;# end lang.object.parse
+
+# Create a new class with Java approach
+# -------------------------------------
+proc lang.object.class {CLASS_ID EXTENTS METHODS} \
+{
+ global _JTCL
+
+ # Class name are _C prefixed
+ upvar #0 _C_$CLASS_ID CLASS
+ global errorInfo
+
+ # Init instance creation count to zero
+ set CLASS(instanceCounter) 0
+
+ # Keep our own name in mind
+ set CLASS(my) $CLASS_ID
+
+ set CLASS(extends) $CLASS_ID
+ set CLASS(super)   {}
+
+ lang.object.extends $errorInfo $CLASS_ID $EXTENTS
+ lang.object.parse   $errorInfo $CLASS_ID $METHODS
+
+ # Store new class in global class list
+ lappend _JTCL(classes) $CLASS_ID
+
+} ;# end lang.object.class
+
+# constructor for a new virtual channel
+# ----------------------------------------------------------
+proc   lang.object.construct {CLASS_ID args} \
+{
+  upvar #0 _C_$CLASS_ID CLASS
+
+  if {![info exist CLASS(instanceCounter)]} {error "UNKNOWN Class |$CLASS_ID| can't new object"}
+  set CLASS(instanceCounter)  [expr $CLASS(instanceCounter) +1]
+
+  # Create object ID prefixed with _O class name & instance count
+  set       MY _O_$CLASS_ID$CLASS(instanceCounter)
+  upvar #0 $MY THIS
+
+  # create a new command with oject name hugly syntaxe but works ...
+  proc $MY {METHOD args}  \
+  "
+    return \[lang.object.call $MY \$METHOD \$args\]
+  " ;# end object command
+
+  # Set basic & minimum caracteristic of Object
+  set THIS(class)   _C_$CLASS_ID
+  set THIS(my)      $MY
+
+  # Call all new method fom inherited method
+  lang.object.new $MY $CLASS_ID
+
+  # Call Constructor method if avaliable
+  if {[info command $CLASS_ID.$CLASS_ID] == {}} \
+    {
+      debug.msg ###WARNING new $CLASS_ID no Constructor
+    } else {
+      eval $CLASS_ID.$CLASS_ID $MY $args
+    }
+
+  return $MY
+} ;# end   lang.object.new
+
+# if not a a tclet rename jCtl base routine to java name
+# ------------------------------------------------------
+if {![info exist embed_args]} \
+{
+  rename   lang.object.class     class
+}
+  rename   lang.object.construct new
+  rename   lang.object.free      free
+
+# ---------------------------------------------------
+# Object Class is a the default root for all object
+# ---------------------------------------------------
+class Object {
+   # "Extents None This is a root object with no sub-class"
+ } {
+  set clog    stdout   ;# "Log file for log method"
+  set errno   {}       ;# "Last error status"
+  set level   0        ;# "Log level when >= $LOG_LEVEL log is activated"
+
+  # "Return Object class without _C_ prefix"
+  # ----------------------------------------
+  public  getClass {}
+  {
+    return $CLASS(my)
+  }
+
+  # "Get an instance variable"
+  # --------------------------
+  public get {VAR}
+  {
+    if [info exist THIS($VAR)] \
+    {
+      return $THIS($VAR)
+    } else {
+      debug.msg  "$MY $CLASS(my) unknow instance var \[$VAR\]"
+      $MY signal "ERROR. Can't find |$VAR| instance in $CLASS(my).$MY"
+    }
+  }
+
+  # "Set or update an instance variable"
+  # ------------------------------------
+  public set {VAR VALUE}
+  {
+    set THIS($VAR) $VALUE
+  }
+
+  # "Debug print/log message methode use either stdout or a console object"
+  # -----------------------------------------------------------------------
+  public  log {args}
+  {
+    global  env
+
+    # if flog is not a valid chanel try use it as an object or a callback
+    if {$env(JTCL_LOG) >= $THIS(level)} \
+    {
+      if {![catch {fconfigure $THIS(clog)}]} \
+      {
+        puts $THIS(clog) "$THIS(class).$THIS(my):$THIS(errno): $args"
+      } {
+        eval $THIS(clog) $THIS(class).$THIS(my):$THIS(errno): $args
+      }
+    }
+  } ;# "end log"
+
+  # "dump object for debug and test purpose"
+  # ----------------------------------------
+  public dump {{TYPE Object} {CMD "puts -nonewline"}}
+  {
+   eval $CMD [list "\ndump Object=$THIS(my)\n"]
+   if {($TYPE == "Object") || ($TYPE == "All")} \
+   {
+     eval $CMD [list "*Object owned\n"]
+     foreach SLOT [lsort [array names THIS]] \
+     {
+        eval $CMD [list "+ $SLOT->$THIS($SLOT)\n"]
+     }
+   }
+
+   if {($TYPE == "Class") || ($TYPE == "All")} \
+   {
+     eval $CMD  [list "*Class owner\n"]
+     upvar #0 $THIS(class) OBJ_CLASS
+     foreach SLOT [lsort [array names OBJ_CLASS]] \
+     {
+        eval $CMD [list "+ $SLOT->$OBJ_CLASS($SLOT)\n"]
+     }
+   }
+   eval $CMD "---\n"
+  } ;# "end dump"
+
+  # "Default exception method abort exec after object dump & log"
+  # -------------------------------------------------------------
+  public signal {MSG}
+  {
+   global errorInfo
+   global errorCode
+   global global tk_library
+   global JTCL_DEBUG
+   global tcl_platform
+
+    # if tk avaliable use a popup
+    if [info exist tk_library] {
+       # we use the default dialog then :
+       if {$tcl_platform(platform) == "macintosh"} {
+	set ok Ok
+       } else {
+	set ok OK
+       }
+       set button [tk_dialog .bgerrorDialog "Error in jTcl Script" \
+	    "Error: $MSG" error 0 $ok "Skip Messages" "Stack Trace"]
+       if {$button == 0} {
+ 	return
+       } elseif {$button == 1} {
+	return -code break
+       }
+
+       set w .bgerrorTrace
+       catch {destroy $w}
+       toplevel $w -class ErrorTrace
+       wm minsize $w 1 1
+       wm title $w "Stack Trace for Error"
+       wm iconname $w "Stack Trace"
+       button $w.ok -text OK -command "destroy $w" -default active
+       if {$tcl_platform(platform) == "macintosh"} {
+         text $w.text -relief flat -bd 2 -highlightthickness 0 -setgrid true \
+	    -yscrollcommand "$w.scroll set" -width 60 -height 20
+       } else {
+         text $w.text -relief sunken -bd 2 -yscrollcommand "$w.scroll set" \
+	    -setgrid true -width 60 -height 20
+       }
+       scrollbar $w.scroll -relief sunken -command "$w.text yview"
+       pack $w.ok -side bottom -padx 3m -pady 2m
+       pack $w.scroll -side right -fill y
+       pack $w.text -side left -expand yes -fill both
+
+       bind $w <Return> "destroy $w"
+       bind $w.text <Return> "destroy $w"
+
+       # Center the window on the screen.
+
+       wm withdraw $w
+       update idletasks
+       set x [expr [winfo screenwidth $w]/2 - [winfo reqwidth $w]/2 \
+	    - [winfo vrootx [winfo parent $w]]]
+       set y [expr [winfo screenheight $w]/2 - [winfo reqheight $w]/2 \
+	    - [winfo vrooty [winfo parent $w]]]
+       wm geom $w +$x+$y
+       wm deiconify $w
+
+       # Be sure to release any grabs that might be present on the
+       # screen, since they could make it impossible for the user
+       # to interact with the stack trace.
+
+       if {[grab current .] != ""} {
+	  grab release [grab current .]
+       }
+
+       $w.text insert end "$MSG\nINF=|[lindex $errorCode end]|\n\nStack Trace\n"
+
+    } else {
+      puts "----------------------------------------------------------------------------"
+      puts "ERROR: $MSG ([lindex $errorCode end])"
+      puts "----------------------------------------------------------------------------"
+    }
+     # Start tracing from first user effective proc
+     for {set LEVEL [expr [info level] -3]} {$LEVEL > 0} {incr LEVEL -1} \
+     {
+        set PROC_NAME   [lindex [info level $LEVEL] 0]
+        set ARG_VAL     [lrange [info level $LEVEL] 1 end]
+        set ARG_NAME    [info args $PROC_NAME]
+
+        if [info exist tk_library] \
+        {
+           $w.text insert end "$LEVEL $PROC_NAME"
+        } else {
+           puts -nonewline "$LEVEL $PROC_NAME"
+        }
+
+        for {set IND 0} {$IND < [llength $ARG_NAME]} {incr IND} \
+        {
+           set NAME [lindex $ARG_NAME $IND]
+           set VAL  [lindex $ARG_VAL $IND]
+
+           # Display empty paramters
+           if {$VAL == ""} {set VAL \{\}}
+
+           if [info exist tk_library] \
+           {
+             $w.text insert end " $NAME=$VAL"
+
+           } else {
+             puts -nonewline " $NAME=$VAL"
+           }
+        }
+        if [info exist tk_library] \
+        {
+          $w.text insert end "\n"
+        } else {
+          puts ""
+        }
+     } ;# foreach level
+
+     # Dump current Object if TK else prompt user
+     if [info exist tk_library] \
+     {
+       $w.text insert end "\n"
+       $MY dump All "$w.text insert end"
+     }
+
+    if {![info exist tk_library]} {
+     if [info exist JTCL_DEBUG] \
+     {
+      while 1 {
+       puts -nonewline "Full trace D(Dump) X(eXit) A(Abort) C(continue) "
+       flush stdout
+       set REP [gets stdin]
+
+       set SAV $errorInfo
+
+       switch [string toupper $REP] \
+       {
+        A {return -code error}
+	D {$MY dump All; continue}
+        C {return}
+        X {puts "program exited"; exit}
+        default {
+          puts "NOT a valid choice use A|D|C|X"
+          continue
+        }
+       }
+      } ;# end while
+     } else {
+       # pause 2s for user to read error
+       after 2000
+     } ;# end if JTCL_DEBUG
+    }  ;# end if TK
+  } ;# "end signal"
+
+
+} ;# "end LangObject Class"
+

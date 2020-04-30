@@ -1,0 +1,96 @@
+#  Copyright(c) 1997-98 FRIDU a Free Software Company
+#
+# Projet    :   Rubicon
+# SubModule :   jTcl zDemo
+# Auteur    :   Fulup Ar Foll [fulup@fridu.bzh]
+#
+# Last
+#      Author      : $Author. fulup $
+#      Date        : $Date. 1997/02/01 17.29.30 $
+#      Revision    : $Revision. 1.2 $
+#      Source      : $Source. /Master/config/header/header.sh,v $
+#
+# Modification History
+# --------------------
+# 01d,16mar97,fulup moved inside rubicon/jTcl tree
+# 01c,22noc97,fulup adapted to jTcl 3.x
+# 01a,11nov97, fulup written
+#
+
+# dont include this file more than one
+# ------------------------------------
+if {![info exist JTCL_LOADED(rubicon.demo)]} \
+{
+  set JTCL_LOADED(rubicon.demo) TRUE
+
+  # Set release symbolic name
+  # -------------------------
+  set DEMO_REL 3.01
+
+  # Set directory depending on devlopement status
+  # ---------------------------------------------
+  switch -- $PKG_STATE\
+  {
+   dev {
+    set _DEMO_IC_CLIENT    $PKG_DIR/IcEngine/client/Tcl
+    set _DEMO_IC_SERVER    $PKG_DIR/IcEngine/server/Tcl
+    set _DEMO_IC_RULES     $PKG_DIR/IcEngine/server/Rules
+    set _DEMO_RPC_SERVER   $PKG_DIR/Rpc/server
+    set _DEMO_RPC_RPC      $PKG_DIR/Rpc/rpc
+    set _DEMO_TCP_SERVER   $PKG_DIR/Tcp/server/Tcl
+    set _DEMO_TCP_CLIENT   $PKG_DIR/Tcp/client/Tcl
+    set _DEMO_WEB_SERVER   $PKG_DIR/Web/httpd
+    set _DEMO_WEB_PROXY    $PKG_DIR/Web/proxy/Tcl
+   }
+   prod {
+    set _DEMO_WEB_SERVER   $PKG_DIR
+    set _DEMO_WEB_PROXY    $PKG_DIR/Tcl
+    set _DEMO_RPC_SERVER   $PKG_DIR
+    set _DEMO_RPC_RPC      $PKG_DIR
+    set _DEMO_IC_CLIENT    $PKG_DIR/Tcl
+    set _DEMO_IC_SERVER    $PKG_DIR/Tcl
+    set _DEMO_IC_RULES     $PKG_DIR/Rules
+    set _DEMO_TCP_SERVER   $PKG_DIR/Tcl
+    set _DEMO_TCP_CLIENT   $PKG_DIR/Tcl
+   }
+   default {
+    puts "ERROR: Unknow PKG_STATE:$PKG_STATE"
+    return ERROR
+   }
+  } ;# end switch
+
+  # Register ic demo
+  jClassRegister demo.jtcl.state   $DEMO_REL "$PKG_STATE $DEMO_REL"
+  jClassRegister demo.ic.client    $DEMO_REL $_DEMO_IC_CLIENT/clientIcDemo.jTcl
+  jClassRegister demo.ic.server    $DEMO_REL $_DEMO_IC_SERVER/serverIcDemo.jTcl
+  jClassRegister demo.ic.rules     $DEMO_REL $_DEMO_IC_RULES/rulesIcDemo.jTcl
+
+  # Register rpc/adr demo
+  jClassRegister demo.adr.root     $DEMO_REL $_DEMO_RPC_SERVER
+  jClassRegister demo.adr.auto     $DEMO_REL $_DEMO_RPC_RPC
+  jClassRegister demo.adr.index    $DEMO_REL $_DEMO_RPC_SERVER/Html/frameAdr.html
+  jClassRegister demo.adr.server   $DEMO_REL $_DEMO_RPC_SERVER/Tcl/httpdAdrDemo.jTcl
+
+  # Register Tcp demo
+  jClassRegister demo.tcp.simpleCl $DEMO_REL $_DEMO_TCP_CLIENT/clientTcpDemo.jTcl
+  jClassRegister demo.tcp.echoSv   $DEMO_REL $_DEMO_TCP_SERVER/echoTcpDemo.jTcl
+  jClassRegister demo.tcp.fileSv   $DEMO_REL $_DEMO_TCP_SERVER/fileTcpDemo.jTcl
+  jClassRegister demo.tcp.chatSv   $DEMO_REL $_DEMO_TCP_SERVER/chatTcpDemo.jTcl
+
+  # Register WEB demo
+  jClassRegister demo.web.proxy    $DEMO_REL $_DEMO_WEB_PROXY/proxyWebDemo.jTcl
+  jClassRegister demo.web.root     $DEMO_REL $_DEMO_WEB_SERVER
+  jClassRegister demo.web.httpd    $DEMO_REL $_DEMO_WEB_SERVER/Tcl/httpdWebDemo.jTcl
+  jClassRegister demo.web.tcl2html $DEMO_REL $_DEMO_WEB_SERVER/Tcl/tcl2htmlWebDemo.jTcl
+
+  # clean up tempry varaibles
+  foreach VAR [info var _DEMO_*] \
+  {
+    unset $VAR
+  }
+
+} ;# end if already loaded
+
+
+
+

@@ -1,0 +1,125 @@
+#
+#  Copyright(c) 1997-98  Fridu a Free Software Company
+#
+# File      :   searchPkglang.jTcl search for jTcl package and register them
+# Project   :   jTcl
+# SubModule :   Core
+# Author    :   Fulup Ar Foll
+#
+# Last
+#      Author      : $Author: fulup $
+#      Date        : $Date: 1999/03/08 08:34:18 $
+#      Revision    : $Revision: 1.2 $
+#      Source      : $Source: /Master/jTcl/jTcl/lang/Tcl/searchPkgLang.jTcl,v $
+#
+# Modification History
+# --------------------
+# 01g,05mar99, fulup corrected development tree source mechanism
+# 01f,16feb99, fulup make it run in with debug set
+# 01e,11nov98, fulup simplified package search
+# 01d,15jul98, fulup update search strategy for module versioning
+# 01c,23jan98, fulup improved TOP managment in developement tree
+# 01b,12jan98, fulup improved package searching in development tree
+# 01a,22now97, fulup written
+#
+
+# Search for package from current dir and source them
+# ---------------------------------------------------
+proc langPkgSearchUp {TARGET} {
+ global env
+ global PKG_DIR
+
+  set CURRENT [pwd]
+
+  catch {cd $TARGET}
+
+  # If path is a final jTcl path process it now
+  if [file exists Etc/Package.jTcl] {
+      set    PKG_DIR [pwd]
+      if [info exists env(JTCL_DEBUG)] \
+         {puts "sourcing $PKG_DIR/Etc/Package.jTcl"}
+      uplevel #0 source $PKG_DIR/Etc/Package.jTcl
+      return
+  }
+
+  # Loop in all lower case directories
+  if {! [catch {glob {*[a-z]}} ERR]} {
+      foreach DIR [glob {*[a-z]}] {
+     if [file exists $DIR/Etc/Package.jTcl] {
+      set    PKG_DIR [pwd]/$DIR
+      if [info exists env(JTCL_DEBUG)] \
+         {puts "sourcing $PKG_DIR/Etc/Package.jTcl"}
+      uplevel #0 source $PKG_DIR/Etc/Package.jTcl
+     }
+    }
+  } else {
+    puts "WARNING: dir=$TARGET from JTCL_PATH as no file"
+  };# end if catch
+
+  # come back to previous directory
+  cd $CURRENT
+} ;# end langPkgSearchUp
+
+# when top is founded compute projet dir name
+# -------------------------------------------------
+proc searchTop {} {
+ global env
+
+
+  # if we find a Project.mk we got TOP
+  if [file exists Etc/Project.mk] \
+  {
+     set env(TOP_PRJ) [pwd]
+     if [info exist env(JTCL_DEBUG)] {
+        puts "FRIDU TOP/Project=$env(TOP_PRJ)"
+     }
+     return 1
+  }
+
+  # move back in directories tree until roor dir
+  set prevDir [pwd]
+  cd ..
+
+  # Did we reach root dir ?
+  if {[pwd] == $prevDir} \
+  {
+    if [info exist env(JTCL_DEBUG)] {
+      puts "WARNING: TOP/Etc/Project.mk not found (Not a Fridu dev tree)"
+    }
+    return 0
+  }
+
+  return [searchTop]
+} ;# end searchTop
+
+# load package depending on JTCL_PATH
+# -----------------------------------
+proc searchPkgLang {} {
+ global env
+ global JTCL_LOADED
+ global PKG_STATE
+
+  # check if we are in a Fridu dev tree
+  # -----------------------------------
+  set PKG_STATE dev
+  set TOP_EXIST [searchTop]
+  if $TOP_EXIST {
+   langPkgSearchUp $env(TOP_PRJ)
+  }
+
+  # then in production tree
+  # -----------------------
+  set PKG_STATE prod
+  foreach PKG_DIR $env(JTCL_PATH) {
+    langPkgSearchUp $PKG_DIR
+  }
+
+  # If main jTcl still not found exit
+  if {![info exist JTCL_LOADED(rubicon.jTcl)]} {
+   puts "ERROR: can't find a valid jTcl distribution"
+   puts "       1: JTCL_PATH to point on directory holding jTcl Etc directory"
+   puts "       Note: setenv JTCL_DEBUG to \\* before restarting should help"
+   exit
+  }
+}
+
